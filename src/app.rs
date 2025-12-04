@@ -64,34 +64,26 @@ impl App for MyApp {
                         self.mem_usage = mem;
                     }
                     WorkerMessage::Done => {
-                        self.is_running = false;
-                        self.explore.running = false;
-                        self.gap.running = false;
-                        self.density.running = false;
-                        self.spiral.running = false;
+                        self.reset_running_and_progress();
                         remove_receiver = true;
                     }
                     WorkerMessage::Stopped => {
-                        self.is_running = false;
-                        self.explore.running = false;
-                        self.gap.running = false;
-                        self.density.running = false;
-                        self.spiral.running = false;
+                        self.reset_running_and_progress();
                         remove_receiver = true;
                         self.log.push_str("Process stopped by user.\n");
                     }
                     WorkerMessage::ExploreData { x, pi_x } => {
                         // x/log(x) を計算
                         let x_f = x as f64;
-                        let x_log_x = if x > 1 {
-                            x_f / x_f.ln()
-                        } else {
-                            0.0
-                        };
+                        let x_log_x = if x > 1 { x_f / x_f.ln() } else { 0.0 };
                         self.explore.data.push((x_f, pi_x as f64, x_log_x));
                         self.explore.current_x = x;
                     }
-                    WorkerMessage::GapData { prime, prev_prime, gap } => {
+                    WorkerMessage::GapData {
+                        prime,
+                        prev_prime,
+                        gap,
+                    } => {
                         *self.gap.data.entry(gap).or_insert(0) += 1;
                         self.gap.current_x = prime;
                         self.gap.last_prime = prime;
@@ -111,8 +103,7 @@ impl App for MyApp {
                         self.density.data.push((interval_start, count));
                         self.density.current_interval = interval_start;
                         // density_processed は Progress メッセージで更新されるので、ここでは更新しない
-                        self.density.total_primes =
-                            self.density.total_primes.saturating_add(count);
+                        self.density.total_primes = self.density.total_primes.saturating_add(count);
                     }
                     WorkerMessage::SpiralData { primes, size } => {
                         self.spiral.primes = primes;
@@ -139,5 +130,3 @@ impl App for MyApp {
         ctx.request_repaint();
     }
 }
-
-
