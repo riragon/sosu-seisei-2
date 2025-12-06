@@ -5,7 +5,7 @@ use bitvec::prelude::*;
 use rayon::prelude::*;
 
 use crate::config::{Config, WheelType};
-use crate::engine_types::{compute_eta, Progress, PrimeResult};
+use crate::engine_types::{compute_eta, PrimeResult, Progress};
 use crate::output::PrimeWriter;
 use crate::sieve_math::{integer_sqrt, simple_sieve};
 
@@ -44,11 +44,8 @@ pub fn generate_primes_cpu(
     // UI からの設定項目は廃止し、内部的に安全なデフォルト値（50%）を使用する。
     use crate::memory;
     let num_threads = rayon::current_num_threads();
-    let optimal_segment_size = memory::calculate_optimal_segment_size(
-        50.0,
-        num_threads,
-        wheel_type,
-    );
+    let optimal_segment_size =
+        memory::calculate_optimal_segment_size(50.0, num_threads, wheel_type);
     let segment_size = if cfg.segment_size > 0 {
         cfg.segment_size.min(optimal_segment_size)
     } else {
@@ -57,7 +54,11 @@ pub fn generate_primes_cpu(
 
     // メモリ情報をログ出力
     let mem_info = memory::get_memory_info(segment_size, num_threads, wheel_type);
-    log::info!("ホイールタイプ: {:?}, セグメントサイズ: {}", wheel_type, segment_size);
+    log::info!(
+        "ホイールタイプ: {:?}, セグメントサイズ: {}",
+        wheel_type,
+        segment_size
+    );
     log::info!("{}", mem_info.format());
 
     // small primes up to sqrt(max)
@@ -143,9 +144,7 @@ pub fn generate_primes_cpu(
             if seg_start > prime_max {
                 break;
             }
-            let seg_end = seg_start
-                .saturating_add(segment_size - 1)
-                .min(prime_max);
+            let seg_end = seg_start.saturating_add(segment_size - 1).min(prime_max);
             group_bounds.push((seg_start, seg_end));
             seg_start = seg_end.saturating_add(1);
         }
@@ -247,7 +246,7 @@ fn sieve_segment_collect(
         if stop_flag.load(Ordering::SeqCst) {
             return Vec::new();
         }
-        
+
         // ホイールで既に除外されている素数はスキップ
         match wheel_type {
             WheelType::Odd => {
@@ -266,7 +265,7 @@ fn sieve_segment_collect(
                 }
             }
         }
-        
+
         if p * p > high {
             break;
         }
@@ -295,13 +294,13 @@ fn sieve_segment_collect(
             if stop_flag.load(Ordering::SeqCst) {
                 return Vec::new();
             }
-            
+
             if let Some(idx) = n_to_index(n, low, wheel_type) {
                 if idx < len {
                     is_prime.set(idx, false);
                 }
             }
-            
+
             // 次の候補を探す
             n += p;
             while n <= high && n_to_index(n, low, wheel_type).is_none() {
@@ -332,10 +331,10 @@ const MOD30_PATTERN: [u64; 8] = [1, 7, 11, 13, 17, 19, 23, 29];
 /// mod 30 での余りからインデックスへのマッピング
 /// 候補でない数は 255 を返す
 const MOD30_TO_INDEX: [u8; 30] = [
-    255, 0, 255, 255, 255, 255, 255, 1,   // 0-7
-    255, 255, 255, 2, 255, 3, 255, 255,   // 8-15
-    255, 4, 255, 5, 255, 255, 255, 6,     // 16-23
-    255, 255, 255, 255, 255, 7            // 24-29
+    255, 0, 255, 255, 255, 255, 255, 1, // 0-7
+    255, 255, 255, 2, 255, 3, 255, 255, // 8-15
+    255, 4, 255, 5, 255, 255, 255, 6, // 16-23
+    255, 255, 255, 255, 255, 7, // 24-29
 ];
 
 /// ホイールタイプに応じた数値nからインデックスへの変換
@@ -345,7 +344,7 @@ fn n_to_index(n: u64, low: u64, wheel_type: WheelType) -> Option<usize> {
     if n < low {
         return None;
     }
-    
+
     match wheel_type {
         WheelType::Odd => {
             // 奇数のみ
@@ -359,34 +358,34 @@ fn n_to_index(n: u64, low: u64, wheel_type: WheelType) -> Option<usize> {
             // mod 6: 6k+1, 6k+5 のみ
             let n_rem = n % 6;
             let low_rem = low % 6;
-            
+
             if (n_rem != 1 && n_rem != 5) || (low_rem != 1 && low_rem != 5) {
                 return None;
             }
-            
+
             // lowとnがどちらも候補の場合
             // lowからnまでの候補の個数を数える
             let low_in_period = (low / 6) * 2 + if low_rem == 5 { 1 } else { 0 };
             let n_in_period = (n / 6) * 2 + if n_rem == 5 { 1 } else { 0 };
-            
+
             Some((n_in_period - low_in_period) as usize)
         }
         WheelType::Mod30 => {
             // mod 30: パターンテーブルを使用
             let n_rem = (n % 30) as usize;
             let low_rem = (low % 30) as usize;
-            
+
             let n_idx = MOD30_TO_INDEX[n_rem];
             let low_idx = MOD30_TO_INDEX[low_rem];
-            
+
             if n_idx == 255 || low_idx == 255 {
                 return None;
             }
-            
+
             // lowからnまでの候補の個数を数える
             let low_in_period = (low / 30) * 8 + low_idx as u64;
             let n_in_period = (n / 30) * 8 + n_idx as u64;
-            
+
             Some((n_in_period - low_in_period) as usize)
         }
     }
@@ -405,15 +404,15 @@ fn index_to_n(idx: usize, low: u64, wheel_type: WheelType) -> u64 {
             // mod 6: 6k+1, 6k+5
             let low_rem = low % 6;
             debug_assert!(low_rem == 1 || low_rem == 5, "low must be a candidate");
-            
+
             // lowが何番目の候補か計算
             let low_in_period = (low / 6) * 2 + if low_rem == 5 { 1 } else { 0 };
-            
+
             // idx番目の候補を計算
             let target_in_period = low_in_period + idx as u64;
             let period = target_in_period / 2;
             let offset = target_in_period % 2;
-            
+
             if offset == 0 {
                 period * 6 + 1
             } else {
@@ -425,15 +424,15 @@ fn index_to_n(idx: usize, low: u64, wheel_type: WheelType) -> u64 {
             let low_rem = (low % 30) as usize;
             let low_idx = MOD30_TO_INDEX[low_rem];
             debug_assert!(low_idx != 255, "low must be a candidate");
-            
+
             // lowが何番目の候補か計算
             let low_in_period = (low / 30) * 8 + low_idx as u64;
-            
+
             // idx番目の候補を計算
             let target_in_period = low_in_period + idx as u64;
             let period = target_in_period / 8;
             let offset = (target_in_period % 8) as usize;
-            
+
             period * 30 + MOD30_PATTERN[offset]
         }
     }
@@ -449,12 +448,12 @@ fn calculate_bitvec_size(low: u64, high: u64, wheel_type: WheelType) -> usize {
         WheelType::Mod6 => {
             // mod 6: 6 周期あたり 2 個
             let range = high - low + 1;
-            ((range / 6) * 2 + 2) as usize  // 余裕を持たせる
+            ((range / 6) * 2 + 2) as usize // 余裕を持たせる
         }
         WheelType::Mod30 => {
             // mod 30: 30 周期あたり 8 個
             let range = high - low + 1;
-            ((range / 30) * 8 + 8) as usize  // 余裕を持たせる
+            ((range / 30) * 8 + 8) as usize // 余裕を持たせる
         }
     }
 }
@@ -472,20 +471,20 @@ fn adjust_low(low: u64, wheel_type: WheelType) -> u64 {
         WheelType::Mod6 => {
             let rem = low % 6;
             match rem {
-                1 | 5 => low,  // 既に候補
-                0 => low + 1,  // 6k → 6k+1
-                2 => low + 3,  // 6k+2 → 6k+5
-                3 => low + 2,  // 6k+3 → 6k+5
-                4 => low + 1,  // 6k+4 → 6k+5
+                1 | 5 => low, // 既に候補
+                0 => low + 1, // 6k → 6k+1
+                2 => low + 3, // 6k+2 → 6k+5
+                3 => low + 2, // 6k+3 → 6k+5
+                4 => low + 1, // 6k+4 → 6k+5
                 _ => unreachable!(),
             }
         }
         WheelType::Mod30 => {
             let rem = low % 30;
             if MOD30_TO_INDEX[rem as usize] != 255 {
-                return low;  // 既に候補
+                return low; // 既に候補
             }
-            
+
             // 次の候補に調整
             for offset in 1..30 {
                 let new_rem = ((rem + offset) % 30) as usize;
@@ -493,9 +492,7 @@ fn adjust_low(low: u64, wheel_type: WheelType) -> u64 {
                     return low + offset;
                 }
             }
-            low  // ここには到達しないはず
+            low // ここには到達しないはず
         }
     }
 }
-
-

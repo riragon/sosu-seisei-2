@@ -102,11 +102,9 @@ fn render_spiral_settings_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) 
 
         ui.add_space(4.0);
         ui.label(
-            egui::RichText::new(
-                "Square: Ulam spiral, Hex: prime spiral on honeycomb lattice",
-            )
-            .size(font_sizes::LABEL)
-            .color(colors::TEXT_SECONDARY),
+            egui::RichText::new("Square: Ulam spiral, Hex: prime spiral on honeycomb lattice")
+                .size(font_sizes::LABEL)
+                .color(colors::TEXT_SECONDARY),
         );
 
         ui.add_space(8.0);
@@ -185,7 +183,7 @@ fn render_spiral_stats_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
         let range_max = center + total_cells - 1;
 
         // 素数の数をカウント
-        let prime_count: u64 = app.spiral.primes.iter().filter(|&&p| p).count() as u64;
+        let prime_count: u64 = app.spiral.primes.count_ones() as u64;
 
         // 素数の割合
         let prime_ratio = if total_cells > 0 {
@@ -215,14 +213,9 @@ fn render_spiral_stats_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             columns[0].vertical(|ui| {
                 ui.label(field_label("Range"));
                 ui.label(
-                    egui::RichText::new(format!(
-                        "{} ~ {}² = {}",
-                        range_min,
-                        size,
-                        range_max
-                    ))
-                    .size(font_sizes::BODY)
-                    .color(colors::TEXT_PRIMARY),
+                    egui::RichText::new(format!("{} ~ {}² = {}", range_min, size, range_max))
+                        .size(font_sizes::BODY)
+                        .color(colors::TEXT_PRIMARY),
                 );
 
                 ui.add_space(8.0);
@@ -332,14 +325,7 @@ where
     }
 
     // pointy-top axial 座標系の 6 方向
-    let dirs: [(i32, i32); 6] = [
-        (1, 0),
-        (1, -1),
-        (0, -1),
-        (-1, 0),
-        (-1, 1),
-        (0, 1),
-    ];
+    let dirs: [(i32, i32); 6] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)];
 
     let mut produced: u64 = 0;
 
@@ -466,8 +452,7 @@ fn render_spiral_grid(ui: &mut egui::Ui, app: &mut MyApp) {
             return;
         }
 
-        let (offset_x, offset_y, cell_size) =
-            handle_spiral_zoom_and_pan(ui, rect, &response, app);
+        let (offset_x, offset_y, cell_size) = handle_spiral_zoom_and_pan(ui, rect, &response, app);
 
         let hover_pos = response.hover_pos();
         let mut path_points: Vec<egui::Pos2> = Vec::new();
@@ -490,13 +475,7 @@ fn render_spiral_grid(ui: &mut egui::Ui, app: &mut MyApp) {
         }
 
         draw_spiral_center_highlight(&painter, rect, app, offset_x, offset_y, cell_size);
-        draw_spiral_overlays(
-            &painter,
-            rect,
-            visible_cells,
-            visible_primes,
-            &hover_value,
-        );
+        draw_spiral_overlays(&painter, rect, visible_cells, visible_primes, &hover_value);
     });
 }
 
@@ -674,10 +653,8 @@ fn draw_spiral_cells(
                 }
 
                 // おおまかなバウンディング矩形（表示領域判定用）
-                let cell_rect = egui::Rect::from_center_size(
-                    cell_center,
-                    egui::vec2(hex_r * 2.0, hex_r * 2.0),
-                );
+                let cell_rect =
+                    egui::Rect::from_center_size(cell_center, egui::vec2(hex_r * 2.0, hex_r * 2.0));
                 if !rect.intersects(cell_rect) {
                     return;
                 }
@@ -764,10 +741,8 @@ fn draw_spiral_center_highlight(
         SpiralGridShape::Hex => {
             let hex_r = cell_size / 1.5;
             let center_pos = egui::pos2(center_x, center_y);
-            let bounds = egui::Rect::from_center_size(
-                center_pos,
-                egui::vec2(hex_r * 2.0, hex_r * 2.0),
-            );
+            let bounds =
+                egui::Rect::from_center_size(center_pos, egui::vec2(hex_r * 2.0, hex_r * 2.0));
             if rect.intersects(bounds) {
                 painter.circle_stroke(
                     center_pos,
@@ -822,5 +797,3 @@ fn draw_spiral_overlays(
         draw_graph_tooltip(painter, *pos, &text, &style);
     }
 }
-
-

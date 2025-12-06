@@ -323,5 +323,3 @@ impl PrimeWriter for LastPrimeWriter {
         Ok(())
     }
 }
-
-

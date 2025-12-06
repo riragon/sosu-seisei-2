@@ -263,6 +263,88 @@ fn render_advanced_options_fields(app: &mut MyApp, ui: &mut egui::Ui) {
                 .color(colors::TEXT_PRIMARY),
         );
     });
+
+    ui.add_space(16.0);
+
+    ui.label(section_title("Memory Limits"));
+    ui.add_space(8.0);
+
+    if render_limit_field(
+        ui,
+        "Max log lines",
+        &mut app.config.max_log_lines,
+        100..=50_000,
+    ) {
+        app.trim_logs();
+    }
+
+    if render_limit_field(
+        ui,
+        "Max explore points",
+        &mut app.config.max_explore_points,
+        100..=200_000,
+    ) {
+        app.enforce_explore_limit();
+    }
+
+    if render_limit_field(
+        ui,
+        "Max gap samples",
+        &mut app.config.max_gap_events,
+        1_000..=200_000,
+    ) {
+        app.enforce_gap_limit();
+    }
+
+    if render_limit_field(
+        ui,
+        "Max density points",
+        &mut app.config.max_density_points,
+        1_000..=200_000,
+    ) {
+        app.enforce_density_limit();
+    }
+
+    if render_limit_field(
+        ui,
+        "Max spiral cells",
+        &mut app.config.max_spiral_cells,
+        10_000..=2_000_000,
+    ) {
+        app.enforce_spiral_limit();
+    }
+}
+
+fn render_limit_field(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut usize,
+    range: std::ops::RangeInclusive<usize>,
+) -> bool {
+    ui.label(field_label(label));
+    ui.add_space(4.0);
+    let mut changed = false;
+
+    ui.horizontal(|ui| {
+        ui.spacing_mut().slider_width = ui.available_width();
+        let mut as_u64 = *value as u64;
+        let response = ui
+            .add(
+                egui::DragValue::new(&mut as_u64)
+                    .range(*range.start() as u64..=*range.end() as u64)
+                    .speed(100.0)
+                    .suffix(" entries"),
+            )
+            .on_hover_text("Upper bound before older entries are rotated out or compacted.");
+
+        if response.changed() {
+            *value = as_u64 as usize;
+            changed = true;
+        }
+    });
+    ui.add_space(12.0);
+
+    changed
 }
 
 /// メインパネル（タブに応じて Generator / Explore / Gap / Density / Spiral を描画）
@@ -275,5 +357,3 @@ pub fn render_main_panel(app: &mut MyApp, ctx: &egui::Context) {
         AppTab::Spiral => render_spiral_panel(app, ctx),
     }
 }
-
-

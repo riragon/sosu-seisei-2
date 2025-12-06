@@ -72,11 +72,5 @@ fn prime_pi_naive(limit: usize) -> usize {
         p += 1;
     }
 
-    is_prime
-        .iter()
-        .take(limit + 1)
-        .filter(|&&b| b)
-        .count()
+    is_prime.iter().take(limit + 1).filter(|&&b| b).count()
 }
-
-
