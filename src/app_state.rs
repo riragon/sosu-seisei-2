@@ -259,7 +259,7 @@ pub struct MyApp {
 pub enum ExploreGraphMode {
     #[default]
     PiVsXLogX, // π(x) vs x/log x
-    Ratio,     // π(x) / (x/log x)
+    Ratio, // π(x) / (x/log x)
 }
 
 impl MyApp {
@@ -317,6 +317,54 @@ impl MyApp {
             spiral: SpiralState::default(),
         }
     }
+
+    /// 全タブ共通で使用する `running` / `progress` をまとめてリセットする。
+    ///
+    /// 新しいタブを追加した際も、このメソッド内のリストを更新するだけで
+    /// 停止時のリセット漏れを防げるようにしている。
+    pub fn reset_running_and_progress(&mut self) {
+        self.is_running = false;
+        self.progress = 0.0;
+        self.current_processed = 0;
+        self.total_range = 0;
+        self.eta = "N/A".to_string();
+
+        for target in self.tab_reset_targets() {
+            *target.running = false;
+            if let Some(progress) = target.progress {
+                *progress = 0.0;
+            }
+        }
+
+        // Spiral は進捗率を processed / total から算出するため、ここで 0 に戻す。
+        self.spiral.processed = 0;
+        self.spiral.total = 0;
+    }
+
+    /// 停止時にリセットしたいタブの `running` / `progress` フィールドへの参照をまとめる。
+    fn tab_reset_targets(&mut self) -> [TabResetTarget<'_>; 4] {
+        [
+            TabResetTarget {
+                running: &mut self.explore.running,
+                progress: Some(&mut self.explore.progress),
+            },
+            TabResetTarget {
+                running: &mut self.gap.running,
+                progress: Some(&mut self.gap.progress),
+            },
+            TabResetTarget {
+                running: &mut self.density.running,
+                progress: Some(&mut self.density.progress),
+            },
+            TabResetTarget {
+                running: &mut self.spiral.running,
+                progress: None,
+            },
+        ]
+    }
 }
 
-
+struct TabResetTarget<'a> {
+    running: &'a mut bool,
+    progress: Option<&'a mut f32>,
+}
