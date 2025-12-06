@@ -124,13 +124,9 @@ fn verify_primes_text_file(
         // OS 固有メッセージは環境によっては文字化けすることがあるため、
         // ログとしては英語のみの簡潔なメッセージに統一する。
         if let Some(code) = e.raw_os_error() {
-            format!(
-                "Failed to open primes file {path:?}: OS error code {code}"
-            )
+            format!("Failed to open primes file {path:?}: OS error code {code}")
         } else {
-            format!(
-                "Failed to open primes file {path:?}: unknown I/O error"
-            )
+            format!("Failed to open primes file {path:?}: unknown I/O error")
         }
     })?;
     let reader = BufReader::with_capacity(8 * 1024 * 1024, file); // 8MB buffer
@@ -139,15 +135,13 @@ fn verify_primes_text_file(
     let mut line_no: u64 = 0;
     let mut min_val: Option<u64> = None;
     let mut max_val: Option<u64> = None;
-    let mut tail: VecDeque<(u64, u64)> =
-        VecDeque::with_capacity(sample_tail.max(1));
+    let mut tail: VecDeque<(u64, u64)> = VecDeque::with_capacity(sample_tail.max(1));
 
     const LOG_INTERVAL: u64 = 1_000_000; // 100万行ごとにログ
 
     for line_res in reader.lines() {
         line_no += 1;
-        let line =
-            line_res.map_err(|e| format!("I/O error at line {line_no}: {e}"))?;
+        let line = line_res.map_err(|e| format!("I/O error at line {line_no}: {e}"))?;
         let trimmed = line.trim();
         if trimmed.is_empty() {
             return Err(format!("Empty line at {line_no}").into());
@@ -166,10 +160,7 @@ fn verify_primes_text_file(
         }
 
         if n != 2 && n % 2 == 0 {
-            return Err(
-                format!("Even composite candidate at line {line_no}: {n}")
-                    .into(),
-            );
+            return Err(format!("Even composite candidate at line {line_no}: {n}").into());
         }
 
         if min_val.is_none() {
@@ -189,9 +180,7 @@ fn verify_primes_text_file(
         // 進捗ログ（100万行ごと）
         if line_no % LOG_INTERVAL == 0 {
             if let Some(ref mut cb) = log_cb {
-                cb(format!(
-                    "Verified {line_no} lines (current value: {n})..."
-                ));
+                cb(format!("Verified {line_no} lines (current value: {n})..."));
             }
         }
     }
@@ -211,12 +200,7 @@ fn verify_primes_text_file(
 
     for (ln, n) in tail.iter() {
         if !is_probable_prime(*n) {
-            return Err(
-                format!(
-                    "Composite detected among tail sample at line {ln}: {n}",
-                )
-                .into(),
-            );
+            return Err(format!("Composite detected among tail sample at line {ln}: {n}",).into());
         }
     }
 
@@ -235,17 +219,14 @@ fn verify_primes_binary_file(
 ) -> PrimeResult<VerifyReport> {
     let file = File::open(path).map_err(|e| {
         if let Some(code) = e.raw_os_error() {
-            format!(
-                "Failed to open primes file {path:?}: OS error code {code}"
-            )
+            format!("Failed to open primes file {path:?}: OS error code {code}")
         } else {
-            format!(
-                "Failed to open primes file {path:?}: unknown I/O error"
-            )
+            format!("Failed to open primes file {path:?}: unknown I/O error")
         }
     })?;
-    let metadata =
-        file.metadata().map_err(|e| format!("Failed to read metadata: {e}"))?;
+    let metadata = file
+        .metadata()
+        .map_err(|e| format!("Failed to read metadata: {e}"))?;
 
     if metadata.len() % 8 != 0 {
         return Err(format!(
@@ -262,8 +243,7 @@ fn verify_primes_binary_file(
     let mut index: u64 = 0;
     let mut min_val: Option<u64> = None;
     let mut max_val: Option<u64> = None;
-    let mut tail: VecDeque<(u64, u64)> =
-        VecDeque::with_capacity(sample_tail.max(1));
+    let mut tail: VecDeque<(u64, u64)> = VecDeque::with_capacity(sample_tail.max(1));
 
     const LOG_INTERVAL: u64 = 1_000_000; // 100万レコードごとにログ
 
@@ -279,22 +259,15 @@ fn verify_primes_binary_file(
 
         if let Some(p) = prev {
             if n <= p {
-                return Err(
-                    format!(
-                        "Non-increasing sequence at record {index}: prev={p}, current={n}",
-                    )
-                    .into(),
-                );
+                return Err(format!(
+                    "Non-increasing sequence at record {index}: prev={p}, current={n}",
+                )
+                .into());
             }
         }
 
         if n != 2 && n % 2 == 0 {
-            return Err(
-                format!(
-                    "Even composite candidate at record {index}: {n}",
-                )
-                .into(),
-            );
+            return Err(format!("Even composite candidate at record {index}: {n}",).into());
         }
 
         if min_val.is_none() {
@@ -314,9 +287,7 @@ fn verify_primes_binary_file(
         // 進捗ログ（100万レコードごと）
         if index % LOG_INTERVAL == 0 {
             if let Some(ref mut cb) = log_cb {
-                cb(format!(
-                    "Verified {index} records (current value: {n})...",
-                ));
+                cb(format!("Verified {index} records (current value: {n})...",));
             }
         }
     }
@@ -337,10 +308,7 @@ fn verify_primes_binary_file(
     for (idx, n) in tail.iter() {
         if !is_probable_prime(*n) {
             return Err(
-                format!(
-                    "Composite detected among tail sample at record {idx}: {n}",
-                )
-                .into(),
+                format!("Composite detected among tail sample at record {idx}: {n}",).into(),
             );
         }
     }
@@ -352,4 +320,3 @@ fn verify_primes_binary_file(
         max: max_val.unwrap(),
     })
 }
-

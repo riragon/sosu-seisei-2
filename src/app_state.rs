@@ -4,10 +4,11 @@
 //! - `MyApp` 構造体
 //! - `MyApp::new` による初期化
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use bitvec::vec::BitVec;
 use eframe::CreationContext;
 use sysinfo::System;
 
@@ -81,6 +82,7 @@ impl Default for ExploreState {
 pub struct GapState {
     pub running: bool,
     pub data: HashMap<u64, u64>, // gap_size -> count
+    pub history: VecDeque<(u64, u64, u64)>,
     pub min_input: String,
     pub max_input: String,
     pub speed: f32,
@@ -104,6 +106,7 @@ impl Default for GapState {
         Self {
             running: false,
             data: HashMap::new(),
+            history: VecDeque::new(),
             min_input: "2".to_string(),
             max_input: "1000000".to_string(),
             speed: 0.0,
@@ -176,7 +179,7 @@ pub struct SpiralState {
     /// - `primes.len()` はおおむね `size * size`。
     /// - インデックス `k` は整数値 `n = center + k` に対応し、
     ///   その値が素数なら `primes[k] == true` になる。
-    pub primes: Vec<bool>,
+    pub primes: BitVec,
     pub generated: bool,
     pub speed: f32,
     pub processed: u64,
@@ -199,7 +202,7 @@ impl Default for SpiralState {
             size: 201,
             center_input: "1".to_string(),
             size_input: "201".to_string(),
-            primes: Vec::new(),
+            primes: BitVec::new(),
             generated: false,
             speed: 0.0,
             processed: 0,
@@ -217,7 +220,7 @@ impl Default for SpiralState {
 pub struct MyApp {
     pub config: Config,
     pub is_running: bool,
-    pub log: String,
+    pub log: VecDeque<String>,
     pub receiver: Option<std::sync::mpsc::Receiver<crate::worker_message::WorkerMessage>>,
 
     pub prime_min_input: String,
@@ -288,7 +291,7 @@ impl MyApp {
 
             config,
             is_running: false,
-            log: String::new(),
+            log: VecDeque::new(),
             receiver: None,
 
             progress: 0.0,
@@ -318,6 +321,145 @@ impl MyApp {
         }
     }
 
+impl MyApp {
+    pub fn append_log_line(&mut self, msg: &str) {
+        if msg.is_empty() {
+            return;
+        }
+
+        for line in msg.split('\n') {
+            if !line.is_empty() {
+                self.log.push_back(line.to_string());
+            }
+        }
+
+        self.trim_logs();
+    }
+
+    pub fn clear_log(&mut self) {
+        self.log.clear();
+    }
+
+    pub fn trim_logs(&mut self) {
+        while self.log.len() > self.config.max_log_lines {
+            self.log.pop_front();
+        }
+    }
+
+    pub fn push_explore_point(&mut self, point: (f64, f64, f64)) {
+        self.explore.data.push(point);
+
+        self.enforce_explore_limit();
+    }
+
+    pub fn enforce_explore_limit(&mut self) {
+        let max_points = self.config.max_explore_points;
+        if self.explore.data.len() > max_points {
+            let overflow = self.explore.data.len() - max_points;
+            self.explore.data.drain(0..overflow);
+        }
+    }
+
+    pub fn push_density_point(&mut self, interval_start: u64, count: u64) {
+        self.density
+            .data
+            .push((interval_start, count.min(u64::MAX)));
+        self.density.total_primes = self.density.total_primes.saturating_add(count);
+
+        self.enforce_density_limit();
+    }
+
+    pub fn enforce_density_limit(&mut self) {
+        let max_points = self.config.max_density_points;
+        if self.density.data.len() > max_points {
+            let overflow = self.density.data.len() - max_points;
+            let mut removed_total = 0u64;
+            for (_, removed_count) in self.density.data.drain(0..overflow) {
+                removed_total = removed_total.saturating_add(removed_count);
+            }
+            self.density.total_primes = self.density.total_primes.saturating_sub(removed_total);
+        }
+    }
+
+    pub fn enforce_gap_limit(&mut self) {
+        self.trim_gap_history();
+    }
+
+    pub fn push_gap_entry(&mut self, prime: u64, prev_prime: u64, gap: u64) {
+        *self.gap.data.entry(gap).or_insert(0) += 1;
+        self.gap.history.push_back((gap, prev_prime, prime));
+        self.gap.prime_count = self.gap.history.len() as u64;
+
+        if gap > self.gap.max_gap_value {
+            self.gap.max_gap_value = gap;
+            self.gap.max_gap_prev_prime = prev_prime;
+            self.gap.max_gap_prime = prime;
+        }
+
+        self.trim_gap_history();
+    }
+
+    fn trim_gap_history(&mut self) {
+        let max_events = self.config.max_gap_events;
+        while self.gap.history.len() > max_events {
+            if let Some((old_gap, _, _)) = self.gap.history.pop_front() {
+                if let Some(count) = self.gap.data.get_mut(&old_gap) {
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        self.gap.data.remove(&old_gap);
+                    }
+                }
+
+                self.gap.prime_count = self.gap.prime_count.saturating_sub(1);
+
+                if old_gap == self.gap.max_gap_value && !self.gap.data.contains_key(&old_gap) {
+                    self.recompute_gap_max();
+                }
+            }
+        }
+
+        self.gap.prime_count = self.gap.history.len() as u64;
+    }
+
+    fn recompute_gap_max(&mut self) {
+        if let Some((gap, prev, prime)) = self.gap.history.iter().max_by_key(|entry| entry.0) {
+            self.gap.max_gap_value = *gap;
+            self.gap.max_gap_prev_prime = *prev;
+            self.gap.max_gap_prime = *prime;
+        } else {
+            self.gap.max_gap_value = 0;
+            self.gap.max_gap_prev_prime = 0;
+            self.gap.max_gap_prime = 0;
+        }
+    }
+
+    pub fn apply_spiral_data(&mut self, primes: Vec<bool>, size: usize) {
+        let mut compact: BitVec = primes.into_iter().collect();
+
+        if compact.len() > self.config.max_spiral_cells {
+            let overflow = compact.len() - self.config.max_spiral_cells;
+            compact.truncate(self.config.max_spiral_cells);
+            self.append_log_line(&format!(
+                "Spiral data truncated to {} cells ({} were dropped to respect the limit).",
+                self.config.max_spiral_cells, overflow
+            ));
+        }
+
+        self.spiral.primes = compact;
+        self.spiral.size = size;
+        self.spiral.generated = true;
+    }
+
+    pub fn enforce_spiral_limit(&mut self) {
+        if self.spiral.primes.len() > self.config.max_spiral_cells {
+            let overflow = self.spiral.primes.len() - self.config.max_spiral_cells;
+            self.spiral.primes.truncate(self.config.max_spiral_cells);
+            self.append_log_line(&format!(
+                "Existing spiral data trimmed by {} cells to satisfy the current limit.",
+                overflow
+            ));
+        }
+    }
     /// 全タブ共通で使用する `running` / `progress` をまとめてリセットする。
     ///
     /// 新しいタブを追加した際も、このメソッド内のリストを更新するだけで

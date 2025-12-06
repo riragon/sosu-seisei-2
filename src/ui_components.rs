@@ -9,12 +9,14 @@ use crate::ui_theme::{colors, font_sizes, layout};
 
 /// 縦中央揃えのテキスト入力欄を作成
 pub fn styled_text_edit(text: &mut String) -> egui::TextEdit<'_> {
-    egui::TextEdit::singleline(text).font(egui::TextStyle::Body).margin(egui::Margin {
-        left: 8.0,
-        right: 8.0,
-        top: 11.0,
-        bottom: 5.0,
-    })
+    egui::TextEdit::singleline(text)
+        .font(egui::TextStyle::Body)
+        .margin(egui::Margin {
+            left: 8.0,
+            right: 8.0,
+            top: 11.0,
+            bottom: 5.0,
+        })
 }
 
 /// セクション見出しラベルを作成
@@ -103,11 +105,7 @@ pub fn draw_graph_tooltip(
     );
 
     painter.rect_filled(bg_rect, 4.0, style.bg);
-    painter.rect_stroke(
-        bg_rect,
-        4.0,
-        egui::Stroke::new(1.0, style.border),
-    );
+    painter.rect_stroke(bg_rect, 4.0, egui::Stroke::new(1.0, style.border));
 
     // 各行を中央揃えで縦方向に並べる
     for (i, line) in lines.iter().enumerate() {
@@ -336,6 +334,3 @@ pub fn apply_zoom_pan_to_point(
         center.y + dy * state.zoom + state.pan_y,
     )
 }
-
-
-

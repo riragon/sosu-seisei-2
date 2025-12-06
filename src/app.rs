@@ -15,15 +15,12 @@ impl App for MyApp {
         // ワーカーからのメッセージをすべて処理し、UI に即時反映する。
         // ここでの処理順序（ログ → 進捗 → ETA → メモリ使用量）は
         // 「常に最新の状態が見える」ことを保証するための一部です。
-        if let Some(ref receiver) = self.receiver {
+        if let Some(receiver) = self.receiver.take() {
             let mut remove_receiver = false;
             while let Ok(message) = receiver.try_recv() {
                 match message {
                     WorkerMessage::Log(msg) => {
-                        self.log.push_str(&msg);
-                        if !msg.ends_with('\n') {
-                            self.log.push('\n');
-                        }
+                        self.append_log_line(&msg);
                     }
                     WorkerMessage::Progress { current, total } => {
                         let p = if total > 0 {
@@ -70,12 +67,13 @@ impl App for MyApp {
                     WorkerMessage::Stopped => {
                         self.reset_running_and_progress();
                         remove_receiver = true;
-                        self.log.push_str("Process stopped by user.\n");
+                        self.append_log_line("Process stopped by user.");
                     }
                     WorkerMessage::ExploreData { x, pi_x } => {
                         // x/log(x) を計算
                         let x_f = x as f64;
                         let x_log_x = if x > 1 { x_f / x_f.ln() } else { 0.0 };
+                        self.push_explore_point((x_f, pi_x as f64, x_log_x));
                         self.explore.data.push((x_f, pi_x as f64, x_log_x));
                         self.explore.current_x = x;
                     }
@@ -84,36 +82,29 @@ impl App for MyApp {
                         prev_prime,
                         gap,
                     } => {
+                        self.push_gap_entry(prime, prev_prime, gap);
                         *self.gap.data.entry(gap).or_insert(0) += 1;
                         self.gap.current_x = prime;
                         self.gap.last_prime = prime;
-                        self.gap.prime_count = self.gap.prime_count.saturating_add(1);
-
-                        // 最大ギャップ情報を更新
-                        if gap > self.gap.max_gap_value {
-                            self.gap.max_gap_value = gap;
-                            self.gap.max_gap_prev_prime = prev_prime;
-                            self.gap.max_gap_prime = prime;
-                        }
                     }
                     WorkerMessage::DensityData {
                         interval_start,
                         count,
                     } => {
-                        self.density.data.push((interval_start, count));
+                        self.push_density_point(interval_start, count);
                         self.density.current_interval = interval_start;
                         // density_processed は Progress メッセージで更新されるので、ここでは更新しない
                         self.density.total_primes = self.density.total_primes.saturating_add(count);
                     }
                     WorkerMessage::SpiralData { primes, size } => {
-                        self.spiral.primes = primes;
-                        self.spiral.size = size;
-                        self.spiral.generated = true;
+                        self.apply_spiral_data(primes, size);
                     }
                 }
             }
             if remove_receiver {
                 self.receiver = None;
+            } else {
+                self.receiver = Some(receiver);
             }
         }
 

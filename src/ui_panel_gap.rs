@@ -195,20 +195,12 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         }
 
         // 全ギャップ統計（ランキング用）
-        let mut all_freq: Vec<(u64, u64)> = app
-            .gap.data
-            .iter()
-            .map(|(&g, &c)| (g, c))
-            .collect();
+        let mut all_freq: Vec<(u64, u64)> = app.gap.data.iter().map(|(&g, &c)| (g, c)).collect();
         all_freq.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let total_gaps: u64 = all_freq.iter().map(|(_, c)| *c).sum();
 
         // ヒストグラム描画用（x 軸順にソート）
-        let mut bins: Vec<(u64, u64)> = app
-            .gap.data
-            .iter()
-            .map(|(g, c)| (*g, *c))
-            .collect();
+        let mut bins: Vec<(u64, u64)> = app.gap.data.iter().map(|(g, c)| (*g, *c)).collect();
         bins.sort_by_key(|(g, _)| *g);
 
         if bins.is_empty() {
@@ -383,11 +375,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
         let mut mode_count: u64 = 0;
         let mut twin_count: u64 = 0;
 
-        let mut sorted: Vec<(u64, u64)> = app
-            .gap.data
-            .iter()
-            .map(|(&g, &c)| (g, c))
-            .collect();
+        let mut sorted: Vec<(u64, u64)> = app.gap.data.iter().map(|(&g, &c)| (g, c)).collect();
         sorted.sort_by_key(|(g, _)| *g);
 
         for (gap, count) in sorted.iter() {
@@ -537,5 +525,3 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
         });
     });
 }
-
-

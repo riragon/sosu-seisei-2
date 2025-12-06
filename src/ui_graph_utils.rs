@@ -113,8 +113,14 @@ pub fn draw_axes(
     let y_axis_end_z = apply_view_transform(y_axis_end, graph_rect, view);
 
     // 軸線描画
-    painter.line_segment([x_axis_start_z, x_axis_end_z], egui::Stroke::new(1.0, axis_color));
-    painter.line_segment([y_axis_start_z, y_axis_end_z], egui::Stroke::new(1.0, axis_color));
+    painter.line_segment(
+        [x_axis_start_z, x_axis_end_z],
+        egui::Stroke::new(1.0, axis_color),
+    );
+    painter.line_segment(
+        [y_axis_start_z, y_axis_end_z],
+        egui::Stroke::new(1.0, axis_color),
+    );
 
     let font_id = egui::FontId::proportional(10.0);
 
@@ -269,11 +275,7 @@ pub fn draw_bar(
     color: egui::Color32,
     rounding: f32,
 ) -> egui::Rect {
-    let center = apply_view_transform(
-        egui::pos2(bar.center_x, bar.center_y),
-        graph_rect,
-        view,
-    );
+    let center = apply_view_transform(egui::pos2(bar.center_x, bar.center_y), graph_rect, view);
 
     let half_w = bar.half_width * view.zoom.max(0.01);
     let half_h = bar.half_height * view.zoom.max(0.01);
@@ -350,10 +352,7 @@ pub fn pick_closest_point(
 /// - `bar_rects`: ズーム後のバー矩形リスト
 ///
 /// 戻り値: ホバー中のバーのインデックス
-pub fn pick_hovered_bar(
-    hover_pos: Option<egui::Pos2>,
-    bar_rects: &[egui::Rect],
-) -> Option<usize> {
+pub fn pick_hovered_bar(hover_pos: Option<egui::Pos2>, bar_rects: &[egui::Rect]) -> Option<usize> {
     let mouse = hover_pos?;
 
     for (i, rect) in bar_rects.iter().enumerate() {
@@ -448,7 +447,13 @@ pub fn draw_expected_density_line(
         points.push(egui::pos2(center_x, y));
     }
 
-    draw_polyline(painter, graph_rect, view, &points, egui::Stroke::new(1.5, color));
+    draw_polyline(
+        painter,
+        graph_rect,
+        view,
+        &points,
+        egui::Stroke::new(1.5, color),
+    );
 }
 
 /// 期待値線の標準色（黄色系）
@@ -532,11 +537,7 @@ pub struct LegendItem<'a> {
 }
 
 /// 右上に凡例を描画する
-pub fn draw_legend(
-    painter: &egui::Painter,
-    graph_rect: egui::Rect,
-    items: &[LegendItem<'_>],
-) {
+pub fn draw_legend(painter: &egui::Painter, graph_rect: egui::Rect, items: &[LegendItem<'_>]) {
     let font_id = egui::FontId::proportional(11.0);
     let line_height = 16.0;
     let legend_x = graph_rect.max.x - 10.0;
@@ -562,4 +563,3 @@ pub fn draw_legend(
         y += line_height;
     }
 }
-

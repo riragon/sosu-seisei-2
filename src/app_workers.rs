@@ -15,7 +15,9 @@ use crate::config::save_config;
 use crate::cpu_engine::generate_primes_cpu;
 use crate::engine_types::{PrimeResult, Progress};
 use crate::output::{FilePrimeWriter, LastPrimeWriter, OutputMetadata};
-use crate::prime_pi_engine::{compute_prime_count_in_range, compute_prime_pi, PRIMECOUNT_MODE, PRIMECOUNT_VERSION};
+use crate::prime_pi_engine::{
+    compute_prime_count_in_range, compute_prime_pi, PRIMECOUNT_MODE, PRIMECOUNT_VERSION,
+};
 use crate::verify::{verify_primes_file, LogCallback};
 use crate::worker_message::{format_eta, WorkerMessage};
 
@@ -27,8 +29,7 @@ impl MyApp {
         match input.trim().parse::<u64>() {
             Ok(v) => Some(v),
             Err(_) => {
-                self.log.push_str(error_msg);
-                self.log.push('\n');
+                self.append_log_line(error_msg);
                 None
             }
         }
@@ -39,8 +40,7 @@ impl MyApp {
         match input.trim().parse::<u64>() {
             Ok(v) if v > 0 => Some(v),
             _ => {
-                self.log.push_str(error_msg);
-                self.log.push('\n');
+                self.append_log_line(error_msg);
                 None
             }
         }
@@ -51,8 +51,7 @@ impl MyApp {
         match input.trim().parse::<usize>() {
             Ok(v) => Some(v),
             Err(_) => {
-                self.log.push_str(error_msg);
-                self.log.push('\n');
+                self.append_log_line(error_msg);
                 None
             }
         }
@@ -61,8 +60,7 @@ impl MyApp {
     /// Explore モードのアニメーションを開始する
     pub fn start_explore(&mut self) {
         if self.is_running || self.explore.running || self.gap.running || self.density.running {
-            self.log
-                .push_str("Cannot start while a computation is running.\n");
+            self.append_log_line("Cannot start while a computation is running.");
             return;
         }
 
@@ -71,27 +69,27 @@ impl MyApp {
         let min_input = self.explore.min_input.clone();
         let max_input = self.explore.max_input.clone();
 
-        let mut explore_min = match self.parse_u64_input(&min_input, "Explore min is not a valid u64 integer.") {
-            Some(v) => v,
-            None => return,
-        };
+        let mut explore_min =
+            match self.parse_u64_input(&min_input, "Explore min is not a valid u64 integer.") {
+                Some(v) => v,
+                None => return,
+            };
 
-        let explore_max = match self.parse_u64_input(&max_input, "Explore max is not a valid u64 integer.") {
-            Some(v) => v,
-            None => return,
-        };
+        let explore_max =
+            match self.parse_u64_input(&max_input, "Explore max is not a valid u64 integer.") {
+                Some(v) => v,
+                None => return,
+            };
 
         // 可視化の都合上、x < 2 はすべて x = 2 に丸める
         if explore_min < 2 {
-            self.log
-                .push_str("Explore min < 2, clamped to 2 for visualization.\n");
+            self.append_log_line("Explore min < 2, clamped to 2 for visualization.");
             explore_min = 2;
             self.explore.min_input = "2".to_string();
         }
 
         if explore_min >= explore_max {
-            self.log
-                .push_str("Explore min must be less than max.\n");
+            self.append_log_line("Explore min must be less than max.");
             return;
         }
 
@@ -105,7 +103,7 @@ impl MyApp {
         self.explore.processed = 0;
         self.explore.total = 0;
         self.stop_flag.store(false, Ordering::SeqCst);
-        self.log.clear();
+        self.clear_log();
 
         let (sender, receiver) = mpsc::channel();
         self.receiver = Some(receiver);
@@ -125,8 +123,7 @@ impl MyApp {
     /// Gap モードのアニメーションを開始する
     pub fn start_gap(&mut self) {
         if self.is_running || self.explore.running || self.gap.running || self.density.running {
-            self.log
-                .push_str("Cannot start while a computation is running.\n");
+            self.append_log_line("Cannot start while a computation is running.");
             return;
         }
 
@@ -134,32 +131,33 @@ impl MyApp {
         let min_input = self.gap.min_input.clone();
         let max_input = self.gap.max_input.clone();
 
-        let mut gap_min = match self.parse_u64_input(&min_input, "Gap min is not a valid u64 integer.") {
-            Some(v) => v,
-            None => return,
-        };
+        let mut gap_min =
+            match self.parse_u64_input(&min_input, "Gap min is not a valid u64 integer.") {
+                Some(v) => v,
+                None => return,
+            };
 
-        let gap_max = match self.parse_u64_input(&max_input, "Gap max is not a valid u64 integer.") {
+        let gap_max = match self.parse_u64_input(&max_input, "Gap max is not a valid u64 integer.")
+        {
             Some(v) => v,
             None => return,
         };
 
         // ギャップの性質上、2 未満は意味がないので 2 に丸める
         if gap_min < 2 {
-            self.log
-                .push_str("Gap min < 2, clamped to 2 for visualization.\n");
+            self.append_log_line("Gap min < 2, clamped to 2 for visualization.");
             gap_min = 2;
             self.gap.min_input = "2".to_string();
         }
 
         if gap_min >= gap_max {
-            self.log
-                .push_str("Gap min must be less than max.\n");
+            self.append_log_line("Gap min must be less than max.");
             return;
         }
 
         // 状態をリセット
         self.gap.data.clear();
+        self.gap.history.clear();
         self.gap.running = true;
         self.is_running = true;
         self.progress = 0.0;
@@ -173,7 +171,7 @@ impl MyApp {
         self.gap.max_gap_prev_prime = 0;
         self.gap.max_gap_prime = 0;
         self.stop_flag.store(false, Ordering::SeqCst);
-        self.log.clear();
+        self.clear_log();
 
         let (sender, receiver) = mpsc::channel();
         self.receiver = Some(receiver);
@@ -181,20 +179,13 @@ impl MyApp {
         let stop_flag = self.stop_flag.clone();
         let speed = self.gap.speed;
 
-        crate::explore_engine::start_gap_animation(
-            gap_min,
-            gap_max,
-            speed,
-            stop_flag,
-            sender,
-        );
+        crate::explore_engine::start_gap_animation(gap_min, gap_max, speed, stop_flag, sender);
     }
 
     /// Density モードのアニメーションを開始する
     pub fn start_density(&mut self) {
         if self.is_running || self.explore.running || self.gap.running || self.density.running {
-            self.log
-                .push_str("Cannot start while a computation is running.\n");
+            self.append_log_line("Cannot start while a computation is running.");
             return;
         }
 
@@ -203,31 +194,34 @@ impl MyApp {
         let max_input = self.density.max_input.clone();
         let interval_input = self.density.interval_input.clone();
 
-        let mut density_min = match self.parse_u64_input(&min_input, "Density min is not a valid u64 integer.") {
-            Some(v) => v,
-            None => return,
-        };
+        let mut density_min =
+            match self.parse_u64_input(&min_input, "Density min is not a valid u64 integer.") {
+                Some(v) => v,
+                None => return,
+            };
 
-        let density_max = match self.parse_u64_input(&max_input, "Density max is not a valid u64 integer.") {
-            Some(v) => v,
-            None => return,
-        };
+        let density_max =
+            match self.parse_u64_input(&max_input, "Density max is not a valid u64 integer.") {
+                Some(v) => v,
+                None => return,
+            };
 
-        let interval_size = match self.parse_positive_u64_input(&interval_input, "Density interval is not a valid positive u64 integer.") {
+        let interval_size = match self.parse_positive_u64_input(
+            &interval_input,
+            "Density interval is not a valid positive u64 integer.",
+        ) {
             Some(v) => v,
             None => return,
         };
 
         if density_min < 2 {
-            self.log
-                .push_str("Density min < 2, clamped to 2 for visualization.\n");
+            self.append_log_line("Density min < 2, clamped to 2 for visualization.");
             density_min = 2;
             self.density.min_input = "2".to_string();
         }
 
         if density_min >= density_max {
-            self.log
-                .push_str("Density min must be less than max.\n");
+            self.append_log_line("Density min must be less than max.");
             return;
         }
 
@@ -242,7 +236,7 @@ impl MyApp {
         self.density.total = 0;
         self.density.total_primes = 0;
         self.stop_flag.store(false, Ordering::SeqCst);
-        self.log.clear();
+        self.clear_log();
 
         let (sender, receiver) = mpsc::channel();
         self.receiver = Some(receiver);
@@ -268,8 +262,7 @@ impl MyApp {
             || self.density.running
             || self.spiral.running
         {
-            self.log
-                .push_str("Cannot start while a computation is running.\n");
+            self.append_log_line("Cannot start while a computation is running.");
             return;
         }
 
@@ -277,12 +270,16 @@ impl MyApp {
         let center_input = self.spiral.center_input.clone();
         let size_input = self.spiral.size_input.clone();
 
-        let center = match self.parse_u64_input(&center_input, "Spiral center is not a valid u64 integer.") {
+        let center = match self
+            .parse_u64_input(&center_input, "Spiral center is not a valid u64 integer.")
+        {
             Some(v) => v,
             None => return,
         };
 
-        let mut size = match self.parse_usize_input(&size_input, "Spiral size is not a valid usize integer.") {
+        let mut size = match self
+            .parse_usize_input(&size_input, "Spiral size is not a valid usize integer.")
+        {
             Some(v) => v,
             None => return,
         };
@@ -300,7 +297,7 @@ impl MyApp {
         // 状態をリセット
         self.spiral.center = center;
         self.spiral.size = size;
-        self.spiral.primes = vec![false; size * size];
+        self.spiral.primes = bitvec::bitvec![0; size * size];
         self.spiral.running = true;
         self.spiral.generated = false;
         self.is_running = true;
@@ -311,7 +308,7 @@ impl MyApp {
         self.spiral.pan_x = 0.0;
         self.spiral.pan_y = 0.0;
         self.stop_flag.store(false, Ordering::SeqCst);
-        self.log.clear();
+        self.clear_log();
 
         let (sender, receiver) = mpsc::channel();
         self.receiver = Some(receiver);
@@ -319,19 +316,12 @@ impl MyApp {
         let stop_flag = self.stop_flag.clone();
         let speed = self.spiral.speed;
 
-        crate::explore_engine::start_spiral_generation(
-            center,
-            size,
-            speed,
-            stop_flag,
-            sender,
-        );
+        crate::explore_engine::start_spiral_generation(center, size, speed, stop_flag, sender);
     }
 
     pub fn start_prime_pi(&mut self) {
         if self.is_running {
-            self.log
-                .push_str("Cannot run π(x) while a computation is running.\n");
+            self.append_log_line("Cannot run π(x) while a computation is running.");
             return;
         }
 
@@ -340,30 +330,30 @@ impl MyApp {
         let min_input = self.prime_min_input.clone();
         let max_input = self.prime_max_input.clone();
 
-        let prime_min = match self.parse_u64_input(&min_input, "prime_min is not a valid u64 integer.") {
-            Some(v) => v,
-            None => return,
-        };
+        let prime_min =
+            match self.parse_u64_input(&min_input, "prime_min is not a valid u64 integer.") {
+                Some(v) => v,
+                None => return,
+            };
 
-        let prime_max = match self.parse_u64_input(&max_input, "prime_max is not a valid u64 integer.") {
-            Some(v) => v,
-            None => return,
-        };
+        let prime_max =
+            match self.parse_u64_input(&max_input, "prime_max is not a valid u64 integer.") {
+                Some(v) => v,
+                None => return,
+            };
 
         if prime_min >= prime_max {
-            self.log
-                .push_str("prime_min must be less than prime_max.\n");
+            self.append_log_line("prime_min must be less than prime_max.");
             return;
         }
 
-        self.log.clear();
+        self.clear_log();
         // 設定としても現在のレンジを保存しておく
         self.config.prime_min = prime_min;
         self.config.prime_max = prime_max;
 
         if let Err(e) = save_config(&self.config) {
-            self.log
-                .push_str(&format!("Failed to save settings: {e}\n"));
+            self.append_log_line(&format!("Failed to save settings: {e}"));
         }
 
         self.is_running = true;
@@ -466,14 +456,13 @@ impl MyApp {
             }
         };
 
-        let writer_buffer_size =
-            match self.writer_buffer_size_input.trim().parse::<usize>() {
-                Ok(v) => v,
-                Err(_) => {
-                    errors.push("writer_buffer_size is not a valid usize integer.");
-                    8 * 1024 * 1024
-                }
-            };
+        let writer_buffer_size = match self.writer_buffer_size_input.trim().parse::<usize>() {
+            Ok(v) => v,
+            Err(_) => {
+                errors.push("writer_buffer_size is not a valid usize integer.");
+                8 * 1024 * 1024
+            }
+        };
 
         if prime_min >= prime_max {
             errors.push("prime_min must be less than prime_max.");
@@ -481,12 +470,12 @@ impl MyApp {
 
         if !errors.is_empty() {
             for e in errors {
-                self.log.push_str(&format!("{e}\n"));
+                self.append_log_line(e);
             }
             return;
         }
 
-        self.log.clear();
+        self.clear_log();
         self.config.prime_min = prime_min;
         self.config.prime_max = prime_max;
         self.config.segment_size = segment_size;
@@ -499,8 +488,7 @@ impl MyApp {
         self.config.use_timestamp_prefix = self.use_timestamp_prefix;
 
         if let Err(e) = save_config(&self.config) {
-            self.log
-                .push_str(&format!("Failed to save settings: {e}\n"));
+            self.append_log_line(&format!("Failed to save settings: {e}"));
         }
 
         self.is_running = true;
@@ -572,9 +560,7 @@ impl MyApp {
                                 total: last_total,
                             })
                             .ok();
-                        sender
-                            .send(WorkerMessage::Eta(format_eta(Some(0))))
-                            .ok();
+                        sender.send(WorkerMessage::Eta(format_eta(Some(0)))).ok();
                     }
 
                     // 最後の素数を表示
@@ -584,9 +570,7 @@ impl MyApp {
                             .ok();
                     } else {
                         sender
-                            .send(WorkerMessage::Log(
-                                "No primes found in range.".to_string(),
-                            ))
+                            .send(WorkerMessage::Log("No primes found in range.".to_string()))
                             .ok();
                     }
 
@@ -602,15 +586,13 @@ impl MyApp {
                     match compute_prime_count_in_range(cfg.prime_min, cfg.prime_max) {
                         Ok(pi_count) => {
                             sender
-                                .send(WorkerMessage::Log(format!(
-                                    "#primes π(x) = {pi_count}"
-                                )))
+                                .send(WorkerMessage::Log(format!("#primes π(x) = {pi_count}")))
                                 .ok();
                             // π(x) 一致チェック
                             if total_primes == pi_count {
                                 sender
                                     .send(WorkerMessage::Log(
-                                        "Verification: OK - count matches π(x)".to_string()
+                                        "Verification: OK - count matches π(x)".to_string(),
                                     ))
                                     .ok();
                             } else {
@@ -697,9 +679,7 @@ impl MyApp {
                                 total: last_total,
                             })
                             .ok();
-                        sender
-                            .send(WorkerMessage::Eta(format_eta(Some(0))))
-                            .ok();
+                        sender.send(WorkerMessage::Eta(format_eta(Some(0)))).ok();
                     }
 
                     // ファイルに書き出した素数の総数と prime_pi によるカウントをログ出力・検証
@@ -715,16 +695,14 @@ impl MyApp {
                     match compute_prime_count_in_range(cfg.prime_min, cfg.prime_max) {
                         Ok(pi_count) => {
                             sender
-                                .send(WorkerMessage::Log(format!(
-                                    "#primes π(x) = {pi_count}"
-                                )))
+                                .send(WorkerMessage::Log(format!("#primes π(x) = {pi_count}")))
                                 .ok();
                             // π(x) 一致チェック
                             if total_primes == pi_count {
                                 pi_x_verified = true;
                                 sender
                                     .send(WorkerMessage::Log(
-                                        "Verification: OK - count matches π(x)".to_string()
+                                        "Verification: OK - count matches π(x)".to_string(),
                                     ))
                                     .ok();
                             } else {
@@ -763,11 +741,8 @@ impl MyApp {
                         Some(PRIMECOUNT_VERSION.to_string()),
                         Some(PRIMECOUNT_MODE.to_string()),
                     );
-                    match metadata.write_to_file(
-                        &cfg.output_dir,
-                        &cfg,
-                        timestamp_prefix.as_deref(),
-                    ) {
+                    match metadata.write_to_file(&cfg.output_dir, &cfg, timestamp_prefix.as_deref())
+                    {
                         Ok(meta_path) => {
                             sender
                                 .send(WorkerMessage::Log(format!(
@@ -778,9 +753,7 @@ impl MyApp {
                         }
                         Err(e) => {
                             sender
-                                .send(WorkerMessage::Log(format!(
-                                    "Failed to write metadata: {e}"
-                                )))
+                                .send(WorkerMessage::Log(format!("Failed to write metadata: {e}")))
                                 .ok();
                         }
                     }
@@ -855,8 +828,7 @@ impl MyApp {
                 .ok();
 
             if let Err(e) = result {
-                let _ = sender
-                    .send(WorkerMessage::Log(format!("An error occurred: {e}\n")));
+                let _ = sender.send(WorkerMessage::Log(format!("An error occurred: {e}\n")));
             }
 
             if stop_flag.load(Ordering::SeqCst) {
@@ -890,4 +862,3 @@ fn start_resource_monitor(sender: mpsc::Sender<WorkerMessage>) -> std::thread::J
         }
     })
 }
-

@@ -232,7 +232,8 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
 
         // 区間幅（ツールチップ用の密度計算に使用）
         let interval_size = app
-            .density.interval_input
+            .density
+            .interval_input
             .trim()
             .parse::<u64>()
             .unwrap_or(1)
@@ -407,22 +408,15 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
 
         // 区間幅とレンジを取得
         let interval_size = app
-            .density.interval_input
+            .density
+            .interval_input
             .trim()
             .parse::<u64>()
             .unwrap_or(1)
             .max(1);
 
-        let min_x = app
-            .density.min_input
-            .trim()
-            .parse::<u64>()
-            .unwrap_or(0);
-        let max_x = app
-            .density.max_input
-            .trim()
-            .parse::<u64>()
-            .unwrap_or(min_x);
+        let min_x = app.density.min_input.trim().parse::<u64>().unwrap_or(0);
+        let max_x = app.density.max_input.trim().parse::<u64>().unwrap_or(min_x);
 
         let range_len = if max_x > min_x {
             (max_x - min_x) as f64
@@ -598,5 +592,3 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
         });
     });
 }
-
-

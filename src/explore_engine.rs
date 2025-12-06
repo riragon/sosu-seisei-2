@@ -8,8 +8,8 @@ use std::sync::{mpsc, Arc};
 
 use crate::prime_pi_engine::compute_prime_pi;
 use crate::sieve_math::simple_sieve;
-use crate::worker_message::WorkerMessage;
 use crate::verify::is_probable_prime;
+use crate::worker_message::WorkerMessage;
 
 /// Explore モードのアニメーションを開始する。
 ///
@@ -53,16 +53,16 @@ pub fn start_explore_animation(
             // π(x) を計算
             match compute_prime_pi(x) {
                 Ok(pi_x) => {
-                    if sender
-                        .send(WorkerMessage::ExploreData { x, pi_x })
-                        .is_err()
-                    {
+                    if sender.send(WorkerMessage::ExploreData { x, pi_x }).is_err() {
                         break;
                     }
                 }
                 Err(e) => {
                     sender
-                        .send(WorkerMessage::Log(format!("Error computing π({}): {}", x, e)))
+                        .send(WorkerMessage::Log(format!(
+                            "Error computing π({}): {}",
+                            x, e
+                        )))
                         .ok();
                     break;
                 }
@@ -447,4 +447,3 @@ pub fn start_spiral_generation(
         let _ = sender.send(WorkerMessage::Done);
     });
 }
-
