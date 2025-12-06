@@ -59,7 +59,7 @@ impl MyApp {
 
     /// Explore モードのアニメーションを開始する
     pub fn start_explore(&mut self) {
-        if self.is_running || self.explore.running || self.gap.running || self.density.running {
+        if self.is_any_running() {
             self.append_log_line("Cannot start while a computation is running.");
             return;
         }
@@ -122,7 +122,7 @@ impl MyApp {
 
     /// Gap モードのアニメーションを開始する
     pub fn start_gap(&mut self) {
-        if self.is_running || self.explore.running || self.gap.running || self.density.running {
+        if self.is_any_running() {
             self.append_log_line("Cannot start while a computation is running.");
             return;
         }
@@ -184,7 +184,7 @@ impl MyApp {
 
     /// Density モードのアニメーションを開始する
     pub fn start_density(&mut self) {
-        if self.is_running || self.explore.running || self.gap.running || self.density.running {
+        if self.is_any_running() {
             self.append_log_line("Cannot start while a computation is running.");
             return;
         }
@@ -256,12 +256,7 @@ impl MyApp {
 
     /// Spiral モード（Ulam Spiral）のアニメーションを開始する
     pub fn start_spiral(&mut self) {
-        if self.is_running
-            || self.explore.running
-            || self.gap.running
-            || self.density.running
-            || self.spiral.running
-        {
+        if self.is_any_running() {
             self.append_log_line("Cannot start while a computation is running.");
             return;
         }

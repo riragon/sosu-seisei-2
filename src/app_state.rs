@@ -266,6 +266,24 @@ pub enum ExploreGraphMode {
 }
 
 impl MyApp {
+    /// いずれかのタブまたはメインが実行中かどうか
+    pub fn is_any_running(&self) -> bool {
+        self.is_running
+            || self.explore.running
+            || self.gap.running
+            || self.density.running
+            || self.spiral.running
+    }
+
+    /// すべての running フラグを停止状態にリセット
+    pub fn reset_all_running(&mut self) {
+        self.is_running = false;
+        self.explore.running = false;
+        self.gap.running = false;
+        self.density.running = false;
+        self.spiral.running = false;
+    }
+
     pub fn new(cc: &CreationContext<'_>) -> Self {
         let config = load_or_create_config().unwrap_or_default();
 
