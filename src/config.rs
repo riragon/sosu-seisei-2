@@ -3,12 +3,6 @@ use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
-const DEFAULT_MAX_LOG_LINES: usize = 2000;
-const DEFAULT_MAX_EXPLORE_POINTS: usize = 10_000;
-const DEFAULT_MAX_GAP_EVENTS: usize = 50_000;
-const DEFAULT_MAX_DENSITY_POINTS: usize = 20_000;
-const DEFAULT_MAX_SPIRAL_CELLS: usize = 400_000;
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Text,
@@ -43,22 +37,18 @@ pub struct Config {
     pub last_prime_only: bool,
     #[serde(default = "default_wheel_type")]
     pub wheel_type: WheelType,
+    #[serde(default = "default_memory_usage_percent")]
+    pub memory_usage_percent: f64,
     #[serde(default = "default_use_timestamp_prefix")]
     pub use_timestamp_prefix: bool,
-    #[serde(default = "default_max_log_lines")]
-    pub max_log_lines: usize,
-    #[serde(default = "default_max_explore_points")]
-    pub max_explore_points: usize,
-    #[serde(default = "default_max_gap_events")]
-    pub max_gap_events: usize,
-    #[serde(default = "default_max_density_points")]
-    pub max_density_points: usize,
-    #[serde(default = "default_max_spiral_cells")]
-    pub max_spiral_cells: usize,
 }
 
 fn default_wheel_type() -> WheelType {
     WheelType::Mod30
+}
+
+fn default_memory_usage_percent() -> f64 {
+    50.0
 }
 
 fn default_prime_pi_x() -> u64 {
@@ -67,26 +57,6 @@ fn default_prime_pi_x() -> u64 {
 
 fn default_use_timestamp_prefix() -> bool {
     true
-}
-
-fn default_max_log_lines() -> usize {
-    DEFAULT_MAX_LOG_LINES
-}
-
-fn default_max_explore_points() -> usize {
-    DEFAULT_MAX_EXPLORE_POINTS
-}
-
-fn default_max_gap_events() -> usize {
-    DEFAULT_MAX_GAP_EVENTS
-}
-
-fn default_max_density_points() -> usize {
-    DEFAULT_MAX_DENSITY_POINTS
-}
-
-fn default_max_spiral_cells() -> usize {
-    DEFAULT_MAX_SPIRAL_CELLS
 }
 
 impl Default for Config {
@@ -102,12 +72,8 @@ impl Default for Config {
             split_count: 0,
             last_prime_only: true,
             wheel_type: WheelType::Mod30,
+            memory_usage_percent: 50.0,
             use_timestamp_prefix: default_use_timestamp_prefix(),
-            max_log_lines: default_max_log_lines(),
-            max_explore_points: default_max_explore_points(),
-            max_gap_events: default_max_gap_events(),
-            max_density_points: default_max_density_points(),
-            max_spiral_cells: default_max_spiral_cells(),
         }
     }
 }
@@ -135,3 +101,5 @@ pub fn save_config(cfg: &Config) -> Result<(), Box<dyn std::error::Error + Send 
     writer.write_all(toml_str.as_bytes())?;
     Ok(())
 }
+
+

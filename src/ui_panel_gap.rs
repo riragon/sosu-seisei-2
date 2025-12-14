@@ -52,15 +52,15 @@ fn render_gap_range_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) {
             ui,
             "Minimum",
             "Maximum",
-            &mut app.gap.min_input,
-            &mut app.gap.max_input,
+            &mut app.gap_min_input,
+            &mut app.gap_max_input,
             layout::INPUT_WIDTH_MEDIUM,
             layout::INPUT_WIDTH_MEDIUM,
         );
         ui.add_space(12.0);
 
         // Speed スライダー（共通コンポーネント）
-        render_speed_slider(ui, "Speed:", &mut app.gap.speed);
+        render_speed_slider(ui, "Speed:", &mut app.gap_speed);
     });
 }
 
@@ -69,10 +69,10 @@ fn render_gap_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
     card_frame().show(ui, |ui| {
         ui.set_min_height(height);
 
-        let percent = calc_percent(app.gap.processed, app.gap.total);
+        let percent = calc_percent(app.gap_processed, app.gap_total);
 
         // 進捗ヘッダー（パーセント + プログレスバー）
-        render_progress_header(ui, percent, app.gap.progress);
+        render_progress_header(ui, percent, app.gap_progress);
 
         ui.add_space(12.0);
 
@@ -81,8 +81,8 @@ fn render_gap_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Gaps processed"));
                 ui.label(
-                    egui::RichText::new(if app.gap.total > 0 {
-                        format!("{} / {}", app.gap.processed, app.gap.total)
+                    egui::RichText::new(if app.gap_total > 0 {
+                        format!("{} / {}", app.gap_processed, app.gap_total)
                     } else {
                         "—".to_string()
                     })
@@ -96,8 +96,8 @@ fn render_gap_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Current x"));
                 ui.label(
-                    egui::RichText::new(if app.gap.running || app.gap.prime_count > 0 {
-                        format!("{}", app.gap.current_x)
+                    egui::RichText::new(if app.gap_running || app.gap_prime_count > 0 {
+                        format!("{}", app.gap_current_x)
                     } else {
                         "—".to_string()
                     })
@@ -111,7 +111,7 @@ fn render_gap_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Primes found"));
                 ui.label(
-                    egui::RichText::new(format!("{}", app.gap.prime_count))
+                    egui::RichText::new(format!("{}", app.gap_prime_count))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_SECONDARY),
                 );
@@ -148,12 +148,12 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                     .add(egui::Button::new("Reset View").min_size(egui::vec2(80.0, 24.0)))
                     .clicked()
                 {
-                    app.gap.view = ZoomPanState::default();
+                    app.gap_view = ZoomPanState::default();
                 }
 
                 // ズーム率表示
                 ui.label(
-                    egui::RichText::new(format!("{:.0}%", app.gap.view.zoom * 100.0))
+                    egui::RichText::new(format!("{:.0}%", app.gap_view.zoom * 100.0))
                         .size(font_sizes::LABEL)
                         .color(colors::TEXT_SECONDARY),
                 );
@@ -161,7 +161,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                 ui.add_space(16.0);
 
                 // Log/Linear スケール切り替えボタン（左側に表示）
-                let scale_label = if app.gap.log_scale {
+                let scale_label = if app.gap_log_scale {
                     "Scale: Log"
                 } else {
                     "Scale: Linear"
@@ -171,7 +171,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                     .on_hover_text("ギャップ出現頻度のスケール（Linear/Log）を切り替え")
                     .clicked()
                 {
-                    app.gap.log_scale = !app.gap.log_scale;
+                    app.gap_log_scale = !app.gap_log_scale;
                 }
             });
         });
@@ -183,7 +183,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
 
         painter.rect_filled(rect, 0.0, colors::CARD_BG);
 
-        if app.gap.data.is_empty() {
+        if app.gap_data.is_empty() {
             painter.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
@@ -195,12 +195,20 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         }
 
         // 全ギャップ統計（ランキング用）
-        let mut all_freq: Vec<(u64, u64)> = app.gap.data.iter().map(|(&g, &c)| (g, c)).collect();
+        let mut all_freq: Vec<(u64, u64)> = app
+            .gap_data
+            .iter()
+            .map(|(&g, &c)| (g, c))
+            .collect();
         all_freq.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let total_gaps: u64 = all_freq.iter().map(|(_, c)| *c).sum();
 
         // ヒストグラム描画用（x 軸順にソート）
-        let mut bins: Vec<(u64, u64)> = app.gap.data.iter().map(|(g, c)| (*g, *c)).collect();
+        let mut bins: Vec<(u64, u64)> = app
+            .gap_data
+            .iter()
+            .map(|(g, c)| (*g, *c))
+            .collect();
         bins.sort_by_key(|(g, _)| *g);
 
         if bins.is_empty() {
@@ -218,7 +226,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
             ui,
             graph_rect,
             &response,
-            &mut app.gap.view,
+            &mut app.gap_view,
             &DEFAULT_ZOOM_CONFIG,
         );
 
@@ -239,7 +247,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         draw_axes(
             &painter,
             graph_rect,
-            &app.gap.view,
+            &app.gap_view,
             &axis_labels,
             colors::TEXT_SECONDARY,
         );
@@ -264,7 +272,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                 let x1 = graph_rect.min.x + (i_f + 1.0) * bin_width - bin_width * 0.1;
                 // 最小高さを4pxに設定し、出現数1でも見えるようにする
                 let min_bar_height = 4.0;
-                let ratio = if app.gap.log_scale {
+                let ratio = if app.gap_log_scale {
                     // 対数スケール: log10(count+1) / log10(max_count+1)
                     (*count as f32 + 1.0).log10() / log_max
                 } else {
@@ -291,7 +299,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                 crate::ui_graph_utils::draw_bar(
                     &painter,
                     graph_rect,
-                    &app.gap.view,
+                    &app.gap_view,
                     bar,
                     colors::ACCENT,
                     2.0,
@@ -300,8 +308,9 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
             .collect();
 
         // ホバー判定（共通ヘルパー）
-        let hover_info: Option<(egui::Pos2, String)> =
-            pick_hovered_bar(hover_pos, &bar_rects).map(|idx| {
+        // `hover_pos` が None のケースでも `unwrap()` しないように安全側に倒す。
+        let hover_info: Option<(egui::Pos2, String)> = hover_pos.and_then(|pos| {
+            pick_hovered_bar(Some(pos), &bar_rects).map(|idx| {
                 let (gap, count) = bins[idx];
                 let ratio = if total_gaps > 0 {
                     count as f64 / total_gaps as f64 * 100.0
@@ -309,8 +318,9 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                     0.0
                 };
                 let text = format!("gap = {}\ncount = {} ({:.2}%)", gap, count, ratio);
-                (hover_pos.unwrap(), text)
-            });
+                (pos, text)
+            })
+        });
 
         // 右上にトップ10ランキング（gap, count, ratio）を小さく表示（位置は固定のまま）
         if total_gaps > 0 && !all_freq.is_empty() {
@@ -359,7 +369,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
         ui.label(section_title("Statistics"));
         ui.add_space(8.0);
 
-        if app.gap.data.is_empty() {
+        if app.gap_data.is_empty() {
             ui.label(
                 egui::RichText::new("No data yet")
                     .size(font_sizes::LABEL)
@@ -375,7 +385,11 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
         let mut mode_count: u64 = 0;
         let mut twin_count: u64 = 0;
 
-        let mut sorted: Vec<(u64, u64)> = app.gap.data.iter().map(|(&g, &c)| (g, c)).collect();
+        let mut sorted: Vec<(u64, u64)> = app
+            .gap_data
+            .iter()
+            .map(|(&g, &c)| (g, c))
+            .collect();
         sorted.sort_by_key(|(g, _)| *g);
 
         for (gap, count) in sorted.iter() {
@@ -401,7 +415,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
 
         // median gap（離散分布の中央値）
         let median_gap = if total_gaps > 0 {
-            let target = (total_gaps + 1) / 2; // 1-based 中央
+            let target = total_gaps.div_ceil(2); // 1-based 中央
             let mut acc = 0u64;
             let mut med = 0u64;
             for (gap, count) in sorted.iter() {
@@ -428,7 +442,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
             columns[0].vertical(|ui| {
                 ui.label(field_label("Prime count"));
                 ui.label(
-                    egui::RichText::new(format!("{}", app.gap.prime_count))
+                    egui::RichText::new(format!("{}", app.gap_prime_count))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -473,12 +487,12 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
             columns[1].vertical(|ui| {
                 ui.label(field_label("Max gap"));
                 ui.label(
-                    egui::RichText::new(if app.gap.max_gap_value > 0 {
+                    egui::RichText::new(if app.gap_max_gap_value > 0 {
                         format!(
                             "{} (between p = {} and {})",
-                            app.gap.max_gap_value,
-                            app.gap.max_gap_prev_prime,
-                            app.gap.max_gap_prime
+                            app.gap_max_gap_value,
+                            app.gap_max_gap_prev_prime,
+                            app.gap_max_gap_prime
                         )
                     } else {
                         "—".to_string()
@@ -525,3 +539,5 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
         });
     });
 }
+
+

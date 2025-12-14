@@ -9,107 +9,76 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 
 use chrono::Local;
-use sysinfo::System;
 
 use crate::config::save_config;
 use crate::cpu_engine::generate_primes_cpu;
 use crate::engine_types::{PrimeResult, Progress};
 use crate::output::{FilePrimeWriter, LastPrimeWriter, OutputMetadata};
-use crate::prime_pi_engine::{
-    compute_prime_count_in_range, compute_prime_pi, PRIMECOUNT_MODE, PRIMECOUNT_VERSION,
-};
+use crate::prime_pi_engine::{compute_prime_pi, PRIMECOUNT_MODE, PRIMECOUNT_VERSION};
 use crate::verify::{verify_primes_file, LogCallback};
 use crate::worker_message::{format_eta, WorkerMessage};
 
 use crate::app_state::MyApp;
 
 impl MyApp {
-    /// 共通の u64 入力パースヘルパー（失敗時はログにメッセージを追記して None を返す）
-    fn parse_u64_input(&mut self, input: &str, error_msg: &str) -> Option<u64> {
-        match input.trim().parse::<u64>() {
-            Ok(v) => Some(v),
-            Err(_) => {
-                self.append_log_line(error_msg);
-                None
-            }
-        }
-    }
-
-    /// 正の u64 入力パースヘルパー（0 や負値はエラー扱い）
-    fn parse_positive_u64_input(&mut self, input: &str, error_msg: &str) -> Option<u64> {
-        match input.trim().parse::<u64>() {
-            Ok(v) if v > 0 => Some(v),
-            _ => {
-                self.append_log_line(error_msg);
-                None
-            }
-        }
-    }
-
-    /// 共通の usize 入力パースヘルパー
-    fn parse_usize_input(&mut self, input: &str, error_msg: &str) -> Option<usize> {
-        match input.trim().parse::<usize>() {
-            Ok(v) => Some(v),
-            Err(_) => {
-                self.append_log_line(error_msg);
-                None
-            }
-        }
-    }
-
     /// Explore モードのアニメーションを開始する
     pub fn start_explore(&mut self) {
-        if self.is_any_running() {
-            self.append_log_line("Cannot start while a computation is running.");
+        if self.is_running || self.explore_running || self.gap_running || self.density_running {
+            self.log
+                .push_str("Cannot start while a computation is running.\n");
             return;
         }
 
         // Explore 専用の Range を使用
-        // 借用チェッカー対策: 入力値を先にクローンしてから parse
-        let min_input = self.explore.min_input.clone();
-        let max_input = self.explore.max_input.clone();
+        let mut explore_min = match self.explore_min_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("Explore min is not a valid u64 integer.\n");
+                return;
+            }
+        };
 
-        let mut explore_min =
-            match self.parse_u64_input(&min_input, "Explore min is not a valid u64 integer.") {
-                Some(v) => v,
-                None => return,
-            };
-
-        let explore_max =
-            match self.parse_u64_input(&max_input, "Explore max is not a valid u64 integer.") {
-                Some(v) => v,
-                None => return,
-            };
+        let explore_max = match self.explore_max_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("Explore max is not a valid u64 integer.\n");
+                return;
+            }
+        };
 
         // 可視化の都合上、x < 2 はすべて x = 2 に丸める
         if explore_min < 2 {
-            self.append_log_line("Explore min < 2, clamped to 2 for visualization.");
+            self.log
+                .push_str("Explore min < 2, clamped to 2 for visualization.\n");
             explore_min = 2;
-            self.explore.min_input = "2".to_string();
+            self.explore_min_input = "2".to_string();
         }
 
         if explore_min >= explore_max {
-            self.append_log_line("Explore min must be less than max.");
+            self.log
+                .push_str("Explore min must be less than max.\n");
             return;
         }
 
         // 状態をリセット
-        self.explore.data.clear();
-        self.explore.current_x = explore_min;
-        self.explore.running = true;
+        self.explore_data.clear();
+        self.explore_current_x = explore_min;
+        self.explore_running = true;
         self.is_running = true;
         self.progress = 0.0;
-        self.explore.progress = 0.0;
-        self.explore.processed = 0;
-        self.explore.total = 0;
+        self.explore_progress = 0.0;
+        self.explore_processed = 0;
+        self.explore_total = 0;
         self.stop_flag.store(false, Ordering::SeqCst);
-        self.clear_log();
+        self.log.clear();
 
         let (sender, receiver) = mpsc::channel();
         self.receiver = Some(receiver);
 
         let stop_flag = self.stop_flag.clone();
-        let speed = self.explore.speed;
+        let speed = self.explore_speed;
 
         crate::explore_engine::start_explore_animation(
             explore_min,
@@ -122,127 +91,142 @@ impl MyApp {
 
     /// Gap モードのアニメーションを開始する
     pub fn start_gap(&mut self) {
-        if self.is_any_running() {
-            self.append_log_line("Cannot start while a computation is running.");
+        if self.is_running || self.explore_running || self.gap_running || self.density_running {
+            self.log
+                .push_str("Cannot start while a computation is running.\n");
             return;
         }
 
-        // 借用チェッカー対策: 入力値を先にクローンしてから parse
-        let min_input = self.gap.min_input.clone();
-        let max_input = self.gap.max_input.clone();
+        let mut gap_min = match self.gap_min_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("Gap min is not a valid u64 integer.\n");
+                return;
+            }
+        };
 
-        let mut gap_min =
-            match self.parse_u64_input(&min_input, "Gap min is not a valid u64 integer.") {
-                Some(v) => v,
-                None => return,
-            };
-
-        let gap_max = match self.parse_u64_input(&max_input, "Gap max is not a valid u64 integer.")
-        {
-            Some(v) => v,
-            None => return,
+        let gap_max = match self.gap_max_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("Gap max is not a valid u64 integer.\n");
+                return;
+            }
         };
 
         // ギャップの性質上、2 未満は意味がないので 2 に丸める
         if gap_min < 2 {
-            self.append_log_line("Gap min < 2, clamped to 2 for visualization.");
+            self.log
+                .push_str("Gap min < 2, clamped to 2 for visualization.\n");
             gap_min = 2;
-            self.gap.min_input = "2".to_string();
+            self.gap_min_input = "2".to_string();
         }
 
         if gap_min >= gap_max {
-            self.append_log_line("Gap min must be less than max.");
+            self.log
+                .push_str("Gap min must be less than max.\n");
             return;
         }
 
         // 状態をリセット
-        self.gap.data.clear();
-        self.gap.history.clear();
-        self.gap.running = true;
+        self.gap_data.clear();
+        self.gap_running = true;
         self.is_running = true;
         self.progress = 0.0;
-        self.gap.progress = 0.0;
-        self.gap.current_x = gap_min;
-        self.gap.last_prime = 0;
-        self.gap.processed = 0;
-        self.gap.total = 0;
-        self.gap.prime_count = 0;
-        self.gap.max_gap_value = 0;
-        self.gap.max_gap_prev_prime = 0;
-        self.gap.max_gap_prime = 0;
+        self.gap_progress = 0.0;
+        self.gap_current_x = gap_min;
+        self.gap_last_prime = 0;
+        self.gap_processed = 0;
+        self.gap_total = 0;
+        self.gap_prime_count = 0;
+        self.gap_max_gap_value = 0;
+        self.gap_max_gap_prev_prime = 0;
+        self.gap_max_gap_prime = 0;
         self.stop_flag.store(false, Ordering::SeqCst);
-        self.clear_log();
+        self.log.clear();
 
         let (sender, receiver) = mpsc::channel();
         self.receiver = Some(receiver);
 
         let stop_flag = self.stop_flag.clone();
-        let speed = self.gap.speed;
+        let speed = self.gap_speed;
 
-        crate::explore_engine::start_gap_animation(gap_min, gap_max, speed, stop_flag, sender);
+        crate::explore_engine::start_gap_animation(
+            gap_min,
+            gap_max,
+            speed,
+            stop_flag,
+            sender,
+        );
     }
 
     /// Density モードのアニメーションを開始する
     pub fn start_density(&mut self) {
-        if self.is_any_running() {
-            self.append_log_line("Cannot start while a computation is running.");
+        if self.is_running || self.explore_running || self.gap_running || self.density_running {
+            self.log
+                .push_str("Cannot start while a computation is running.\n");
             return;
         }
 
-        // 借用チェッカー対策: 入力値を先にクローンしてから parse
-        let min_input = self.density.min_input.clone();
-        let max_input = self.density.max_input.clone();
-        let interval_input = self.density.interval_input.clone();
+        let mut density_min = match self.density_min_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("Density min is not a valid u64 integer.\n");
+                return;
+            }
+        };
 
-        let mut density_min =
-            match self.parse_u64_input(&min_input, "Density min is not a valid u64 integer.") {
-                Some(v) => v,
-                None => return,
-            };
+        let density_max = match self.density_max_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("Density max is not a valid u64 integer.\n");
+                return;
+            }
+        };
 
-        let density_max =
-            match self.parse_u64_input(&max_input, "Density max is not a valid u64 integer.") {
-                Some(v) => v,
-                None => return,
-            };
-
-        let interval_size = match self.parse_positive_u64_input(
-            &interval_input,
-            "Density interval is not a valid positive u64 integer.",
-        ) {
-            Some(v) => v,
-            None => return,
+        let interval_size = match self.density_interval_input.trim().parse::<u64>() {
+            Ok(v) if v > 0 => v,
+            _ => {
+                self.log
+                    .push_str("Density interval is not a valid positive u64 integer.\n");
+                return;
+            }
         };
 
         if density_min < 2 {
-            self.append_log_line("Density min < 2, clamped to 2 for visualization.");
+            self.log
+                .push_str("Density min < 2, clamped to 2 for visualization.\n");
             density_min = 2;
-            self.density.min_input = "2".to_string();
+            self.density_min_input = "2".to_string();
         }
 
         if density_min >= density_max {
-            self.append_log_line("Density min must be less than max.");
+            self.log
+                .push_str("Density min must be less than max.\n");
             return;
         }
 
         // 状態をリセット
-        self.density.data.clear();
-        self.density.running = true;
+        self.density_data.clear();
+        self.density_running = true;
         self.is_running = true;
         self.progress = 0.0;
-        self.density.progress = 0.0;
-        self.density.current_interval = density_min;
-        self.density.processed = 0;
-        self.density.total = 0;
-        self.density.total_primes = 0;
+        self.density_progress = 0.0;
+        self.density_current_interval = density_min;
+        self.density_processed = 0;
+        self.density_total = 0;
+        self.density_total_primes = 0;
         self.stop_flag.store(false, Ordering::SeqCst);
-        self.clear_log();
+        self.log.clear();
 
         let (sender, receiver) = mpsc::channel();
         self.receiver = Some(receiver);
 
         let stop_flag = self.stop_flag.clone();
-        let speed = self.density.speed;
+        let speed = self.density_speed;
 
         crate::explore_engine::start_density_animation(
             density_min,
@@ -256,99 +240,116 @@ impl MyApp {
 
     /// Spiral モード（Ulam Spiral）のアニメーションを開始する
     pub fn start_spiral(&mut self) {
-        if self.is_any_running() {
-            self.append_log_line("Cannot start while a computation is running.");
+        if self.is_running
+            || self.explore_running
+            || self.gap_running
+            || self.density_running
+            || self.spiral_running
+        {
+            self.log
+                .push_str("Cannot start while a computation is running.\n");
             return;
         }
 
-        // 借用チェッカー対策: 入力値を先にクローンしてから parse
-        let center_input = self.spiral.center_input.clone();
-        let size_input = self.spiral.size_input.clone();
-
-        let center = match self
-            .parse_u64_input(&center_input, "Spiral center is not a valid u64 integer.")
-        {
-            Some(v) => v,
-            None => return,
+        let center = match self.spiral_center_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("Spiral center is not a valid u64 integer.\n");
+                return;
+            }
         };
 
-        let mut size = match self
-            .parse_usize_input(&size_input, "Spiral size is not a valid usize integer.")
-        {
-            Some(v) => v,
-            None => return,
+        let mut size = match self.spiral_size_input.trim().parse::<usize>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("Spiral size is not a valid usize integer.\n");
+                return;
+            }
         };
 
         // グリッドサイズは下限のみ設定し（>=5）、奇数に揃える（中心を明確にするため）
         if size < 5 {
             size = 5;
-            self.spiral.size_input = "5".to_string();
+            self.spiral_size_input = "5".to_string();
         }
         if size % 2 == 0 {
             size += 1;
-            self.spiral.size_input = size.to_string();
+            self.spiral_size_input = size.to_string();
         }
 
         // 状態をリセット
-        self.spiral.center = center;
-        self.spiral.size = size;
-        self.spiral.primes = bitvec::bitvec![0; size * size];
-        self.spiral.running = true;
-        self.spiral.generated = false;
+        self.spiral_center = center;
+        self.spiral_size = size;
+        self.spiral_primes = vec![false; size * size];
+        self.spiral_running = true;
+        self.spiral_generated = false;
         self.is_running = true;
         self.progress = 0.0;
-        self.spiral.processed = 0;
-        self.spiral.total = (size as u64).saturating_mul(size as u64);
-        self.spiral.zoom = 1.0;
-        self.spiral.pan_x = 0.0;
-        self.spiral.pan_y = 0.0;
+        self.spiral_processed = 0;
+        self.spiral_total = (size as u64).saturating_mul(size as u64);
+        self.spiral_zoom = 1.0;
+        self.spiral_pan_x = 0.0;
+        self.spiral_pan_y = 0.0;
         self.stop_flag.store(false, Ordering::SeqCst);
-        self.clear_log();
+        self.log.clear();
 
         let (sender, receiver) = mpsc::channel();
         self.receiver = Some(receiver);
 
         let stop_flag = self.stop_flag.clone();
-        let speed = self.spiral.speed;
+        let speed = self.spiral_speed;
 
-        crate::explore_engine::start_spiral_generation(center, size, speed, stop_flag, sender);
+        crate::explore_engine::start_spiral_generation(
+            center,
+            size,
+            speed,
+            stop_flag,
+            sender,
+        );
     }
 
     pub fn start_prime_pi(&mut self) {
         if self.is_running {
-            self.append_log_line("Cannot run π(x) while a computation is running.");
+            self.log
+                .push_str("Cannot run π(x) while a computation is running.\n");
             return;
         }
 
         // prime_min / prime_max の現在の入力値を使用して区間 [prime_min, prime_max] の素数個数を数える。
-        // 借用チェッカー対策: 入力値を先にクローンしてから parse
-        let min_input = self.prime_min_input.clone();
-        let max_input = self.prime_max_input.clone();
+        let prime_min = match self.prime_min_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("prime_min is not a valid u64 integer.\n");
+                return;
+            }
+        };
 
-        let prime_min =
-            match self.parse_u64_input(&min_input, "prime_min is not a valid u64 integer.") {
-                Some(v) => v,
-                None => return,
-            };
-
-        let prime_max =
-            match self.parse_u64_input(&max_input, "prime_max is not a valid u64 integer.") {
-                Some(v) => v,
-                None => return,
-            };
+        let prime_max = match self.prime_max_input.trim().parse::<u64>() {
+            Ok(v) => v,
+            Err(_) => {
+                self.log
+                    .push_str("prime_max is not a valid u64 integer.\n");
+                return;
+            }
+        };
 
         if prime_min >= prime_max {
-            self.append_log_line("prime_min must be less than prime_max.");
+            self.log
+                .push_str("prime_min must be less than prime_max.\n");
             return;
         }
 
-        self.clear_log();
+        self.log.clear();
         // 設定としても現在のレンジを保存しておく
         self.config.prime_min = prime_min;
         self.config.prime_max = prime_max;
 
         if let Err(e) = save_config(&self.config) {
-            self.append_log_line(&format!("Failed to save settings: {e}"));
+            self.log
+                .push_str(&format!("Failed to save settings: {e}\n"));
         }
 
         self.is_running = true;
@@ -364,7 +365,7 @@ impl MyApp {
         let stop_flag = self.stop_flag.clone();
 
         std::thread::spawn(move || {
-            let monitor_handle = start_resource_monitor(sender.clone());
+            let monitor_handle = crate::worker_jobs::start_resource_monitor(sender.clone());
 
             sender
                 .send(WorkerMessage::Log(format!(
@@ -379,7 +380,7 @@ impl MyApp {
                 } else {
                     0
                 };
-                let count = compute_prime_count_in_range(prime_min, prime_max)?;
+                let count = pi_max.saturating_sub(pi_before_min);
                 Ok((pi_max, pi_before_min, count))
             })();
 
@@ -451,11 +452,27 @@ impl MyApp {
             }
         };
 
-        let writer_buffer_size = match self.writer_buffer_size_input.trim().parse::<usize>() {
-            Ok(v) => v,
+        let writer_buffer_size =
+            match self.writer_buffer_size_input.trim().parse::<usize>() {
+                Ok(v) => v,
+                Err(_) => {
+                    errors.push("writer_buffer_size is not a valid usize integer.");
+                    8 * 1024 * 1024
+                }
+            };
+
+        let memory_usage_percent = match self.memory_usage_percent_input.trim().parse::<f64>() {
+            Ok(v) => {
+                if !(10.0..=90.0).contains(&v) {
+                    errors.push("memory_usage_percent must be between 10.0 and 90.0.");
+                    50.0
+                } else {
+                    v
+                }
+            }
             Err(_) => {
-                errors.push("writer_buffer_size is not a valid usize integer.");
-                8 * 1024 * 1024
+                errors.push("memory_usage_percent is not a valid number.");
+                50.0
             }
         };
 
@@ -465,12 +482,12 @@ impl MyApp {
 
         if !errors.is_empty() {
             for e in errors {
-                self.append_log_line(e);
+                self.log.push_str(&format!("{e}\n"));
             }
             return;
         }
 
-        self.clear_log();
+        self.log.clear();
         self.config.prime_min = prime_min;
         self.config.prime_max = prime_max;
         self.config.segment_size = segment_size;
@@ -479,11 +496,13 @@ impl MyApp {
         self.config.output_dir = self.output_dir_input.clone();
         self.config.split_count = split_count;
         self.config.wheel_type = self.selected_wheel_type;
+        self.config.memory_usage_percent = memory_usage_percent;
         self.config.last_prime_only = self.last_prime_only;
         self.config.use_timestamp_prefix = self.use_timestamp_prefix;
 
         if let Err(e) = save_config(&self.config) {
-            self.append_log_line(&format!("Failed to save settings: {e}"));
+            self.log
+                .push_str(&format!("Failed to save settings: {e}\n"));
         }
 
         self.is_running = true;
@@ -499,7 +518,7 @@ impl MyApp {
         let stop_flag = self.stop_flag.clone();
 
         std::thread::spawn(move || {
-            let monitor_handle = start_resource_monitor(sender.clone());
+            let monitor_handle = crate::worker_jobs::start_resource_monitor(sender.clone());
 
             let run = || -> PrimeResult<()> {
                 if cfg.last_prime_only {
@@ -555,7 +574,9 @@ impl MyApp {
                                 total: last_total,
                             })
                             .ok();
-                        sender.send(WorkerMessage::Eta(format_eta(Some(0)))).ok();
+                        sender
+                            .send(WorkerMessage::Eta(format_eta(Some(0))))
+                            .ok();
                     }
 
                     // 最後の素数を表示
@@ -565,7 +586,9 @@ impl MyApp {
                             .ok();
                     } else {
                         sender
-                            .send(WorkerMessage::Log("No primes found in range.".to_string()))
+                            .send(WorkerMessage::Log(
+                                "No primes found in range.".to_string(),
+                            ))
                             .ok();
                     }
 
@@ -578,16 +601,26 @@ impl MyApp {
                         .ok();
 
                     // primecount (prime_pi) による区間 [prime_min, prime_max] の素数個数
-                    match compute_prime_count_in_range(cfg.prime_min, cfg.prime_max) {
+                    match (|| -> PrimeResult<u64> {
+                        let pi_max = compute_prime_pi(cfg.prime_max)?;
+                        let pi_before_min = if cfg.prime_min > 0 {
+                            compute_prime_pi(cfg.prime_min - 1)?
+                        } else {
+                            0
+                        };
+                        Ok(pi_max.saturating_sub(pi_before_min))
+                    })() {
                         Ok(pi_count) => {
                             sender
-                                .send(WorkerMessage::Log(format!("#primes π(x) = {pi_count}")))
+                                .send(WorkerMessage::Log(format!(
+                                    "#primes π(x) = {pi_count}"
+                                )))
                                 .ok();
                             // π(x) 一致チェック
                             if total_primes == pi_count {
                                 sender
                                     .send(WorkerMessage::Log(
-                                        "Verification: OK - count matches π(x)".to_string(),
+                                        "Verification: OK - count matches π(x)".to_string()
                                     ))
                                     .ok();
                             } else {
@@ -674,7 +707,9 @@ impl MyApp {
                                 total: last_total,
                             })
                             .ok();
-                        sender.send(WorkerMessage::Eta(format_eta(Some(0)))).ok();
+                        sender
+                            .send(WorkerMessage::Eta(format_eta(Some(0))))
+                            .ok();
                     }
 
                     // ファイルに書き出した素数の総数と prime_pi によるカウントをログ出力・検証
@@ -687,17 +722,27 @@ impl MyApp {
 
                     // primecount (prime_pi) による区間 [prime_min, prime_max] の素数個数
                     let mut pi_x_verified = false;
-                    match compute_prime_count_in_range(cfg.prime_min, cfg.prime_max) {
+                    match (|| -> PrimeResult<u64> {
+                        let pi_max = compute_prime_pi(cfg.prime_max)?;
+                        let pi_before_min = if cfg.prime_min > 0 {
+                            compute_prime_pi(cfg.prime_min - 1)?
+                        } else {
+                            0
+                        };
+                        Ok(pi_max.saturating_sub(pi_before_min))
+                    })() {
                         Ok(pi_count) => {
                             sender
-                                .send(WorkerMessage::Log(format!("#primes π(x) = {pi_count}")))
+                                .send(WorkerMessage::Log(format!(
+                                    "#primes π(x) = {pi_count}"
+                                )))
                                 .ok();
                             // π(x) 一致チェック
                             if total_primes == pi_count {
                                 pi_x_verified = true;
                                 sender
                                     .send(WorkerMessage::Log(
-                                        "Verification: OK - count matches π(x)".to_string(),
+                                        "Verification: OK - count matches π(x)".to_string()
                                     ))
                                     .ok();
                             } else {
@@ -736,8 +781,11 @@ impl MyApp {
                         Some(PRIMECOUNT_VERSION.to_string()),
                         Some(PRIMECOUNT_MODE.to_string()),
                     );
-                    match metadata.write_to_file(&cfg.output_dir, &cfg, timestamp_prefix.as_deref())
-                    {
+                    match metadata.write_to_file(
+                        &cfg.output_dir,
+                        &cfg,
+                        timestamp_prefix.as_deref(),
+                    ) {
                         Ok(meta_path) => {
                             sender
                                 .send(WorkerMessage::Log(format!(
@@ -748,7 +796,9 @@ impl MyApp {
                         }
                         Err(e) => {
                             sender
-                                .send(WorkerMessage::Log(format!("Failed to write metadata: {e}")))
+                                .send(WorkerMessage::Log(format!(
+                                    "Failed to write metadata: {e}"
+                                )))
                                 .ok();
                         }
                     }
@@ -823,7 +873,8 @@ impl MyApp {
                 .ok();
 
             if let Err(e) = result {
-                let _ = sender.send(WorkerMessage::Log(format!("An error occurred: {e}\n")));
+                let _ = sender
+                    .send(WorkerMessage::Log(format!("An error occurred: {e}\n")));
             }
 
             if stop_flag.load(Ordering::SeqCst) {
@@ -836,24 +887,4 @@ impl MyApp {
     }
 }
 
-/// メモリ使用量を 500ms ごとにポーリングし、`WorkerMessage::MemUsage` として送信する。
-///
-/// - このスレッドはメインの計算とは独立して動作し、UI の「Memory Usage」表示を更新します。
-/// - sender 側がドロップされた場合（計算終了・画面クローズなど）はループを終了します。
-fn start_resource_monitor(sender: mpsc::Sender<WorkerMessage>) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(move || {
-        let mut sys = System::new_all();
-        sys.refresh_memory();
 
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            sys.refresh_memory();
-
-            let mem_usage = sys.used_memory();
-
-            if sender.send(WorkerMessage::MemUsage(mem_usage)).is_err() {
-                break;
-            }
-        }
-    })
-}

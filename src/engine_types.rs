@@ -46,3 +46,5 @@ pub fn compute_eta(processed: u64, total: u64, elapsed_secs: f64) -> Option<u64>
         None
     }
 }
+
+

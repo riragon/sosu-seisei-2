@@ -7,8 +7,8 @@ use crate::ui_components::{
     GraphTooltipStyle, ZoomPanState,
 };
 use crate::ui_graph_utils::{
-    apply_view_transform, data_to_screen, draw_axes, draw_polyline, pick_closest_point, AxisLabels,
-    LegendItem, DEFAULT_ZOOM_CONFIG,
+    apply_view_transform, data_to_screen, draw_axes, draw_polyline, pick_closest_point,
+    AxisLabels, LegendItem, DEFAULT_ZOOM_CONFIG,
 };
 use crate::ui_theme::{colors, font_sizes, layout};
 
@@ -53,8 +53,8 @@ fn render_explore_range_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) {
             ui,
             "Minimum",
             "Maximum",
-            &mut app.explore.min_input,
-            &mut app.explore.max_input,
+            &mut app.explore_min_input,
+            &mut app.explore_max_input,
             layout::INPUT_WIDTH_MEDIUM,
             layout::INPUT_WIDTH_MEDIUM,
         );
@@ -62,7 +62,7 @@ fn render_explore_range_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) {
         ui.add_space(12.0);
 
         // Speed スライダー（共通コンポーネント）
-        render_speed_slider(ui, "Speed:", &mut app.explore.speed);
+        render_speed_slider(ui, "Speed:", &mut app.explore_speed);
     });
 }
 
@@ -72,10 +72,10 @@ fn render_explore_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
         // Range カードと同じ高さを維持
         ui.set_min_height(height);
 
-        let percent = calc_percent(app.explore.processed, app.explore.total);
+        let percent = calc_percent(app.explore_processed, app.explore_total);
 
         // 進捗ヘッダー（パーセント + プログレスバー）
-        render_progress_header(ui, percent, app.explore.progress);
+        render_progress_header(ui, percent, app.explore_progress);
 
         ui.add_space(12.0);
 
@@ -84,8 +84,8 @@ fn render_explore_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Processed"));
                 ui.label(
-                    egui::RichText::new(if app.explore.total > 0 {
-                        format!("{} / {}", app.explore.processed, app.explore.total)
+                    egui::RichText::new(if app.explore_total > 0 {
+                        format!("{} / {}", app.explore_processed, app.explore_total)
                     } else {
                         "—".to_string()
                     })
@@ -99,8 +99,8 @@ fn render_explore_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Current x"));
                 ui.label(
-                    egui::RichText::new(if app.explore.running || !app.explore.data.is_empty() {
-                        format!("{}", app.explore.current_x)
+                    egui::RichText::new(if app.explore_running || !app.explore_data.is_empty() {
+                        format!("{}", app.explore_current_x)
                     } else {
                         "—".to_string()
                     })
@@ -114,7 +114,7 @@ fn render_explore_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Data Points"));
                 ui.label(
-                    egui::RichText::new(format!("{}", app.explore.data.len()))
+                    egui::RichText::new(format!("{}", app.explore_data.len()))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_SECONDARY),
                 );
@@ -137,58 +137,32 @@ fn render_explore_graph_card(ui: &mut egui::Ui, app: &mut MyApp) {
             // グラフモード切り替えボタン
             let tab_size = egui::vec2(100.0, 24.0);
 
-            let pi_selected = app.explore.graph_mode == ExploreGraphMode::PiVsXLogX;
-            let pi_fill = if pi_selected {
-                colors::ACCENT
-            } else {
-                egui::Color32::TRANSPARENT
-            };
-            let pi_text = if pi_selected {
-                egui::Color32::WHITE
-            } else {
-                colors::TEXT_SECONDARY
-            };
-            if ui
-                .add(
-                    egui::Button::new(
-                        egui::RichText::new("π(x) vs x/logx")
-                            .size(12.0)
-                            .color(pi_text),
-                    )
+            let pi_selected = app.explore_graph_mode == ExploreGraphMode::PiVsXLogX;
+            let pi_fill = if pi_selected { colors::ACCENT } else { egui::Color32::TRANSPARENT };
+            let pi_text = if pi_selected { egui::Color32::WHITE } else { colors::TEXT_SECONDARY };
+            if ui.add(
+                egui::Button::new(egui::RichText::new("π(x) vs x/logx").size(12.0).color(pi_text))
                     .fill(pi_fill)
                     .min_size(tab_size),
-                )
-                .clicked()
-            {
-                app.explore.graph_mode = ExploreGraphMode::PiVsXLogX;
+            ).clicked() {
+                app.explore_graph_mode = ExploreGraphMode::PiVsXLogX;
             }
 
-            let ratio_selected = app.explore.graph_mode == ExploreGraphMode::Ratio;
-            let ratio_fill = if ratio_selected {
-                colors::ACCENT
-            } else {
-                egui::Color32::TRANSPARENT
-            };
-            let ratio_text = if ratio_selected {
-                egui::Color32::WHITE
-            } else {
-                colors::TEXT_SECONDARY
-            };
-            if ui
-                .add(
-                    egui::Button::new(egui::RichText::new("Ratio").size(12.0).color(ratio_text))
-                        .fill(ratio_fill)
-                        .min_size(egui::vec2(60.0, 24.0)),
-                )
-                .clicked()
-            {
-                app.explore.graph_mode = ExploreGraphMode::Ratio;
+            let ratio_selected = app.explore_graph_mode == ExploreGraphMode::Ratio;
+            let ratio_fill = if ratio_selected { colors::ACCENT } else { egui::Color32::TRANSPARENT };
+            let ratio_text = if ratio_selected { egui::Color32::WHITE } else { colors::TEXT_SECONDARY };
+            if ui.add(
+                egui::Button::new(egui::RichText::new("Ratio").size(12.0).color(ratio_text))
+                    .fill(ratio_fill)
+                    .min_size(egui::vec2(60.0, 24.0)),
+            ).clicked() {
+                app.explore_graph_mode = ExploreGraphMode::Ratio;
             }
 
             ui.add_space(16.0);
 
             // 追跡モードチェックボックス
-            ui.checkbox(&mut app.explore.follow_mode, "");
+            ui.checkbox(&mut app.explore_follow_mode, "");
             ui.label(
                 egui::RichText::new("Follow")
                     .size(12.0)
@@ -198,21 +172,21 @@ fn render_explore_graph_card(ui: &mut egui::Ui, app: &mut MyApp) {
             ui.add_space(8.0);
 
             // ウィンドウサイズスライダー（追跡モード時のみ有効）
-            if app.explore.follow_mode {
+            if app.explore_follow_mode {
                 ui.label(
                     egui::RichText::new("Window:")
                         .size(12.0)
                         .color(colors::TEXT_SECONDARY),
                 );
-                let mut window_f = app.explore.window_size as f32;
+                let mut window_f = app.explore_window_size as f32;
                 ui.add(
                     egui::Slider::new(&mut window_f, 20.0..=200.0)
                         .show_value(false)
                         .clamping(egui::SliderClamping::Always),
                 );
-                app.explore.window_size = window_f as usize;
+                app.explore_window_size = window_f as usize;
                 ui.label(
-                    egui::RichText::new(format!("{}", app.explore.window_size))
+                    egui::RichText::new(format!("{}", app.explore_window_size))
                         .size(12.0)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -226,10 +200,10 @@ fn render_explore_graph_card(ui: &mut egui::Ui, app: &mut MyApp) {
                     .add(egui::Button::new("Reset View").min_size(egui::vec2(80.0, 24.0)))
                     .clicked()
                 {
-                    app.explore.view = ZoomPanState::default();
+                    app.explore_view = ZoomPanState::default();
                 }
                 ui.label(
-                    egui::RichText::new(format!("{:.0}%", app.explore.view.zoom * 100.0))
+                    egui::RichText::new(format!("{:.0}%", app.explore_view.zoom * 100.0))
                         .size(font_sizes::LABEL)
                         .color(colors::TEXT_SECONDARY),
                 );
@@ -248,18 +222,13 @@ fn render_explore_graph_card(ui: &mut egui::Ui, app: &mut MyApp) {
 }
 
 /// Render pi(x) vs x/log x or ratio graph（ズーム・ツールチップ対応）
-fn render_pi_graph(
-    app: &mut MyApp,
-    ui: &mut egui::Ui,
-    rect: egui::Rect,
-    response: &egui::Response,
-) {
+fn render_pi_graph(app: &mut MyApp, ui: &mut egui::Ui, rect: egui::Rect, response: &egui::Response) {
     let painter = ui.painter_at(rect);
 
     // 背景
     painter.rect_filled(rect, 0.0, colors::CARD_BG);
 
-    if app.explore.data.is_empty() {
+    if app.explore_data.is_empty() {
         painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -271,12 +240,12 @@ fn render_pi_graph(
     }
 
     // Follow mode: show only recent data points
-    let data: Vec<(f64, f64, f64)> = if app.explore.follow_mode {
-        let len = app.explore.data.len();
-        let start = len.saturating_sub(app.explore.window_size);
-        app.explore.data[start..].to_vec()
+    let data: Vec<(f64, f64, f64)> = if app.explore_follow_mode {
+        let len = app.explore_data.len();
+        let start = len.saturating_sub(app.explore_window_size);
+        app.explore_data[start..].to_vec()
     } else {
-        app.explore.data.clone()
+        app.explore_data.clone()
     };
 
     if data.is_empty() {
@@ -295,7 +264,7 @@ fn render_pi_graph(
         ui,
         graph_rect,
         response,
-        &mut app.explore.view,
+        &mut app.explore_view,
         &DEFAULT_ZOOM_CONFIG,
     );
 
@@ -304,14 +273,14 @@ fn render_pi_graph(
 
     let axis_color = colors::TEXT_SECONDARY;
 
-    match app.explore.graph_mode {
+    match app.explore_graph_mode {
         ExploreGraphMode::PiVsXLogX => {
             render_pi_vs_xlogx_graph(
                 &painter,
                 &data,
                 graph_rect,
                 axis_color,
-                &app.explore.view,
+                &app.explore_view,
                 hover_pos,
                 &mut tooltip,
             );
@@ -322,7 +291,7 @@ fn render_pi_graph(
                 &data,
                 graph_rect,
                 axis_color,
-                &app.explore.view,
+                &app.explore_view,
                 hover_pos,
                 &mut tooltip,
             );
@@ -352,10 +321,7 @@ fn render_pi_vs_xlogx_graph(
     }
 
     // データ範囲を計算
-    let min_x = data
-        .iter()
-        .map(|(x, _, _)| *x)
-        .fold(f64::INFINITY, f64::min);
+    let min_x = data.iter().map(|(x, _, _)| *x).fold(f64::INFINITY, f64::min);
     let max_x = data.iter().map(|(x, _, _)| *x).fold(0.0_f64, f64::max);
     let max_y = data
         .iter()
@@ -440,13 +406,9 @@ fn render_pi_vs_xlogx_graph(
     }
 
     // ツールチップ（共通ヘルパーで最近傍点を選択）
-    if let Some((idx, pos)) = pick_closest_point(
-        hover_pos,
-        graph_rect,
-        view,
-        &pi_screen_points,
-        f32::INFINITY,
-    ) {
+    if let Some((idx, pos)) =
+        pick_closest_point(hover_pos, graph_rect, view, &pi_screen_points, f32::INFINITY)
+    {
         let (x, pi, xlx) = data[idx];
         let text = format!(
             "x = {:.0}\npi(x) = {:.0}\nx/logx = {:.1}\ndiff = {:.1}",
@@ -601,3 +563,5 @@ fn render_ratio_graph(
         *tooltip = Some((pos, text));
     }
 }
+
+

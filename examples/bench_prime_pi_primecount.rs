@@ -30,7 +30,10 @@ fn main() {
         match compute_prime_pi(x) {
             Ok(pi) => {
                 let elapsed = start.elapsed();
-                println!("  pi({x}) = {pi}  (elapsed: {:.3?})", elapsed);
+                println!(
+                    "  pi({x}) = {pi}  (elapsed: {:.3?})",
+                    elapsed
+                );
             }
             Err(e) => {
                 println!("  Error while computing pi({x}): {e}");
@@ -39,3 +42,5 @@ fn main() {
         println!();
     }
 }
+
+

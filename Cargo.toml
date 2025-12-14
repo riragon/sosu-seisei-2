@@ -5,9 +5,6 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-wgpu = "23"
-pollster = "0.4"
-bytemuck = { version = "1", features = ["derive"] }
 rayon = "1.10"
 bitvec = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -21,5 +18,3 @@ sysinfo = "0.32"
 rfd = "0.15"
 primecount = "0.2"
 chrono = "0.4"
-plotters = "0.3"
-egui-plotter = "0.4"

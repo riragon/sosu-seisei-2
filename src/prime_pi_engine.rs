@@ -27,22 +27,3 @@ pub fn compute_prime_pi(x: u64) -> PrimeResult<u64> {
     let pi_i64 = primecount::pi(x_i64);
     Ok(pi_i64 as u64)
 }
-
-/// 区間 [min, max] に含まれる素数の個数を primecount で計算するヘルパー。
-///
-/// - min > max の場合はエラーを返す。
-/// - 計算自体は `compute_prime_pi` を2回呼ぶだけの薄いラッパー。
-pub fn compute_prime_count_in_range(min: u64, max: u64) -> PrimeResult<u64> {
-    if min > max {
-        return Err("min must be <= max".into());
-    }
-
-    let pi_max = compute_prime_pi(max)?;
-    let pi_before_min = if min > 0 {
-        compute_prime_pi(min - 1)?
-    } else {
-        0
-    };
-
-    Ok(pi_max.saturating_sub(pi_before_min))
-}

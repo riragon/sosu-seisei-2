@@ -6,7 +6,7 @@ use crate::ui_components::{
     card_frame, draw_graph_tooltip, field_label, render_speed_slider, section_title,
     styled_text_edit, GraphTooltipStyle,
 };
-use crate::ui_graph_utils::{handle_spiral_zoom_and_pan_input, DEFAULT_SPIRAL_ZOOM_CONFIG};
+use crate::ui_graph_utils::{handle_spiral_zoom_and_pan_input, SpiralZoomPanConfig};
 use crate::ui_theme::{colors, font_sizes, layout};
 
 /// Spiral モードのパネル（Ulam Spiral）
@@ -52,7 +52,7 @@ fn render_spiral_settings_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) 
                 ui.add_space(4.0);
                 ui.add_sized(
                     [120.0, layout::INPUT_HEIGHT],
-                    styled_text_edit(&mut app.spiral.center_input),
+                    styled_text_edit(&mut app.spiral_center_input),
                 );
             });
 
@@ -64,7 +64,7 @@ fn render_spiral_settings_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) 
                 ui.add_space(4.0);
                 ui.add_sized(
                     [120.0, layout::INPUT_HEIGHT],
-                    styled_text_edit(&mut app.spiral.size_input),
+                    styled_text_edit(&mut app.spiral_size_input),
                 );
             });
         });
@@ -82,18 +82,18 @@ fn render_spiral_settings_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) 
         ui.horizontal(|ui| {
             ui.label(field_label("Grid shape"));
             egui::ComboBox::new("spiral_grid_shape", "")
-                .selected_text(match app.spiral.grid_shape {
+                .selected_text(match app.spiral_grid_shape {
                     SpiralGridShape::Square => "Square (Ulam)",
                     SpiralGridShape::Hex => "Hex (Honeycomb)",
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
-                        &mut app.spiral.grid_shape,
+                        &mut app.spiral_grid_shape,
                         SpiralGridShape::Square,
                         "Square",
                     );
                     ui.selectable_value(
-                        &mut app.spiral.grid_shape,
+                        &mut app.spiral_grid_shape,
                         SpiralGridShape::Hex,
                         "Hex (honeycomb)",
                     );
@@ -102,9 +102,11 @@ fn render_spiral_settings_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) 
 
         ui.add_space(4.0);
         ui.label(
-            egui::RichText::new("Square: Ulam spiral, Hex: prime spiral on honeycomb lattice")
-                .size(font_sizes::LABEL)
-                .color(colors::TEXT_SECONDARY),
+            egui::RichText::new(
+                "Square: Ulam spiral, Hex: prime spiral on honeycomb lattice",
+            )
+            .size(font_sizes::LABEL)
+            .color(colors::TEXT_SECONDARY),
         );
 
         ui.add_space(8.0);
@@ -112,19 +114,19 @@ fn render_spiral_settings_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) 
         // パス線の表示 ON/OFF
         ui.horizontal(|ui| {
             ui.label(field_label("Spiral path"));
-            ui.checkbox(&mut app.spiral.show_path, "Show path line");
+            ui.checkbox(&mut app.spiral_show_path, "Show path line");
         });
 
         ui.add_space(8.0);
 
         // Speed スライダー（共通コンポーネント: 1x / 3x / MAX）
-        render_speed_slider(ui, "Speed:", &mut app.spiral.speed);
+        render_speed_slider(ui, "Speed:", &mut app.spiral_speed);
 
         ui.add_space(8.0);
 
         // Progress 情報
-        let processed = app.spiral.processed;
-        let total = app.spiral.total;
+        let processed = app.spiral_processed;
+        let total = app.spiral_total;
         let percent = if total > 0 {
             (processed as f64 / total as f64) * 100.0
         } else {
@@ -155,10 +157,10 @@ fn render_spiral_stats_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
         ui.label(section_title("Statistics"));
         ui.add_space(12.0);
 
-        let size = app.spiral.size;
-        let center = app.spiral.center;
+        let size = app.spiral_size;
+        let center = app.spiral_center;
 
-        if size == 0 || app.spiral.primes.is_empty() {
+        if size == 0 || app.spiral_primes.is_empty() {
             ui.label(
                 egui::RichText::new("No data yet")
                     .size(font_sizes::LABEL)
@@ -183,7 +185,7 @@ fn render_spiral_stats_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
         let range_max = center + total_cells - 1;
 
         // 素数の数をカウント
-        let prime_count: u64 = app.spiral.primes.count_ones() as u64;
+        let prime_count: u64 = app.spiral_primes.iter().filter(|&&p| p).count() as u64;
 
         // 素数の割合
         let prime_ratio = if total_cells > 0 {
@@ -213,9 +215,14 @@ fn render_spiral_stats_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             columns[0].vertical(|ui| {
                 ui.label(field_label("Range"));
                 ui.label(
-                    egui::RichText::new(format!("{} ~ {}² = {}", range_min, size, range_max))
-                        .size(font_sizes::BODY)
-                        .color(colors::TEXT_PRIMARY),
+                    egui::RichText::new(format!(
+                        "{} ~ {}² = {}",
+                        range_min,
+                        size,
+                        range_max
+                    ))
+                    .size(font_sizes::BODY)
+                    .color(colors::TEXT_PRIMARY),
                 );
 
                 ui.add_space(8.0);
@@ -325,7 +332,14 @@ where
     }
 
     // pointy-top axial 座標系の 6 方向
-    let dirs: [(i32, i32); 6] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)];
+    let dirs: [(i32, i32); 6] = [
+        (1, 0),
+        (1, -1),
+        (0, -1),
+        (-1, 0),
+        (-1, 1),
+        (0, 1),
+    ];
 
     let mut produced: u64 = 0;
 
@@ -446,13 +460,14 @@ fn render_spiral_grid(ui: &mut egui::Ui, app: &mut MyApp) {
 
         painter.rect_filled(rect, 0.0, colors::CARD_BG);
 
-        let size = app.spiral.size;
-        if size == 0 || app.spiral.primes.is_empty() {
+        let size = app.spiral_size;
+        if size == 0 || app.spiral_primes.is_empty() {
             draw_spiral_empty_message(&painter, rect);
             return;
         }
 
-        let (offset_x, offset_y, cell_size) = handle_spiral_zoom_and_pan(ui, rect, &response, app);
+        let (offset_x, offset_y, cell_size) =
+            handle_spiral_zoom_and_pan(ui, rect, &response, app);
 
         let hover_pos = response.hover_pos();
         let mut path_points: Vec<egui::Pos2> = Vec::new();
@@ -470,12 +485,18 @@ fn render_spiral_grid(ui: &mut egui::Ui, app: &mut MyApp) {
         );
 
         // セル中心を結ぶ細い線で螺旋パスを可視化（設定で ON/OFF）
-        if app.spiral.show_path {
+        if app.spiral_show_path {
             draw_spiral_path(&painter, &path_points);
         }
 
         draw_spiral_center_highlight(&painter, rect, app, offset_x, offset_y, cell_size);
-        draw_spiral_overlays(&painter, rect, visible_cells, visible_primes, &hover_value);
+        draw_spiral_overlays(
+            &painter,
+            rect,
+            visible_cells,
+            visible_primes,
+            &hover_value,
+        );
     });
 }
 
@@ -489,13 +510,13 @@ fn render_spiral_header(ui: &mut egui::Ui, app: &mut MyApp) {
                 .add(egui::Button::new("Reset View").min_size(egui::vec2(80.0, 24.0)))
                 .clicked()
             {
-                app.spiral.zoom = 1.0;
-                app.spiral.pan_x = 0.0;
-                app.spiral.pan_y = 0.0;
+                app.spiral_zoom = 1.0;
+                app.spiral_pan_x = 0.0;
+                app.spiral_pan_y = 0.0;
             }
             // ズーム表示
             ui.label(
-                egui::RichText::new(format!("{:.0}%", app.spiral.zoom * 100.0))
+                egui::RichText::new(format!("{:.0}%", app.spiral_zoom * 100.0))
                     .size(font_sizes::LABEL)
                     .color(colors::TEXT_SECONDARY),
             );
@@ -521,17 +542,18 @@ fn handle_spiral_zoom_and_pan(
     response: &egui::Response,
     app: &mut MyApp,
 ) -> (f32, f32, f32) {
-    let size = app.spiral.size as f32;
+    let size = app.spiral_size as f32;
 
-    // 共通ヘルパーでズーム・パン入力を処理（統一された ZoomPanConfig を使用）
+    // 共通ヘルパーでズーム・パン入力を処理
+    let config = SpiralZoomPanConfig::default();
     handle_spiral_zoom_and_pan_input(
         ui,
         rect,
         response,
-        &mut app.spiral.zoom,
-        &mut app.spiral.pan_x,
-        &mut app.spiral.pan_y,
-        &DEFAULT_SPIRAL_ZOOM_CONFIG,
+        &mut app.spiral_zoom,
+        &mut app.spiral_pan_x,
+        &mut app.spiral_pan_y,
+        &config,
     );
 
     let padding = 12.0;
@@ -544,11 +566,11 @@ fn handle_spiral_zoom_and_pan(
     let base_cell_w = inner_rect.width() / size;
     let base_cell_h = inner_rect.height() / size;
     let base_cell_size = base_cell_w.min(base_cell_h).max(0.1);
-    let cell_size = base_cell_size * app.spiral.zoom;
+    let cell_size = base_cell_size * app.spiral_zoom;
 
     // パンを適用したオフセット
-    let offset_x = inner_rect.center().x - size * cell_size / 2.0 + app.spiral.pan_x;
-    let offset_y = inner_rect.center().y - size * cell_size / 2.0 + app.spiral.pan_y;
+    let offset_x = inner_rect.center().x - size * cell_size / 2.0 + app.spiral_pan_x;
+    let offset_y = inner_rect.center().y - size * cell_size / 2.0 + app.spiral_pan_y;
 
     (offset_x, offset_y, cell_size)
 }
@@ -565,13 +587,13 @@ fn draw_spiral_cells(
     hover_value: &mut Option<(u64, egui::Pos2, bool)>,
     path_points: &mut Vec<egui::Pos2>,
 ) -> (u64, u64) {
-    let size = app.spiral.size;
+    let size = app.spiral_size;
     if size == 0 {
         return (0, 0);
     }
 
     let total_cells = (size as u64).saturating_mul(size as u64);
-    let primes = &app.spiral.primes;
+    let primes = &app.spiral_primes;
     let total = total_cells.min(primes.len() as u64);
 
     // グリッド中心の画面座標
@@ -582,7 +604,7 @@ fn draw_spiral_cells(
     let mut visible_cells: u64 = 0;
     let mut visible_primes: u64 = 0;
 
-    match app.spiral.grid_shape {
+    match app.spiral_grid_shape {
         SpiralGridShape::Square => {
             let c = size_f / 2.0;
             for_each_square_spiral_index(size, |step, gx, gy| {
@@ -619,7 +641,7 @@ fn draw_spiral_cells(
                 // ホバー判定
                 if let Some(mouse_pos) = hover_pos {
                     if cell_rect.contains(mouse_pos) {
-                        let value = app.spiral.center.saturating_add(step);
+                        let value = app.spiral_center.saturating_add(step);
                         *hover_value = Some((value, mouse_pos, is_prime));
                     }
                 }
@@ -653,8 +675,10 @@ fn draw_spiral_cells(
                 }
 
                 // おおまかなバウンディング矩形（表示領域判定用）
-                let cell_rect =
-                    egui::Rect::from_center_size(cell_center, egui::vec2(hex_r * 2.0, hex_r * 2.0));
+                let cell_rect = egui::Rect::from_center_size(
+                    cell_center,
+                    egui::vec2(hex_r * 2.0, hex_r * 2.0),
+                );
                 if !rect.intersects(cell_rect) {
                     return;
                 }
@@ -683,7 +707,7 @@ fn draw_spiral_cells(
                     let dx = mouse_pos.x - cx;
                     let dy = mouse_pos.y - cy;
                     if dx * dx + dy * dy <= hex_r * hex_r {
-                        let value = app.spiral.center.saturating_add(step);
+                        let value = app.spiral_center.saturating_add(step);
                         *hover_value = Some((value, mouse_pos, is_prime));
                     }
                 }
@@ -717,7 +741,7 @@ fn draw_spiral_center_highlight(
     offset_y: f32,
     cell_size: f32,
 ) {
-    let size = app.spiral.size;
+    let size = app.spiral_size;
     if size == 0 {
         return;
     }
@@ -725,7 +749,7 @@ fn draw_spiral_center_highlight(
     let center_x = offset_x + size_f * cell_size / 2.0;
     let center_y = offset_y + size_f * cell_size / 2.0;
 
-    match app.spiral.grid_shape {
+    match app.spiral_grid_shape {
         SpiralGridShape::Square => {
             let px0 = egui::pos2(center_x - cell_size / 2.0, center_y - cell_size / 2.0);
             let px1 = egui::pos2(px0.x + cell_size, px0.y + cell_size);
@@ -741,8 +765,10 @@ fn draw_spiral_center_highlight(
         SpiralGridShape::Hex => {
             let hex_r = cell_size / 1.5;
             let center_pos = egui::pos2(center_x, center_y);
-            let bounds =
-                egui::Rect::from_center_size(center_pos, egui::vec2(hex_r * 2.0, hex_r * 2.0));
+            let bounds = egui::Rect::from_center_size(
+                center_pos,
+                egui::vec2(hex_r * 2.0, hex_r * 2.0),
+            );
             if rect.intersects(bounds) {
                 painter.circle_stroke(
                     center_pos,
@@ -797,3 +823,5 @@ fn draw_spiral_overlays(
         draw_graph_tooltip(painter, *pos, &text, &style);
     }
 }
+
+

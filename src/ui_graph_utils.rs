@@ -64,6 +64,7 @@ pub fn apply_view_transform(
 // =============================================================================
 
 /// 軸ラベル情報
+#[derive(Default)]
 pub struct AxisLabels {
     /// Y軸の上端ラベル（例: "1000"）
     pub y_max: String,
@@ -73,17 +74,6 @@ pub struct AxisLabels {
     pub x_min: String,
     /// X軸の右端ラベル（例: "1000000"）
     pub x_max: String,
-}
-
-impl Default for AxisLabels {
-    fn default() -> Self {
-        Self {
-            y_max: String::new(),
-            y_min: String::new(),
-            x_min: String::new(),
-            x_max: String::new(),
-        }
-    }
 }
 
 /// 標準的な L 字型軸（左下原点）を描画する
@@ -113,14 +103,8 @@ pub fn draw_axes(
     let y_axis_end_z = apply_view_transform(y_axis_end, graph_rect, view);
 
     // 軸線描画
-    painter.line_segment(
-        [x_axis_start_z, x_axis_end_z],
-        egui::Stroke::new(1.0, axis_color),
-    );
-    painter.line_segment(
-        [y_axis_start_z, y_axis_end_z],
-        egui::Stroke::new(1.0, axis_color),
-    );
+    painter.line_segment([x_axis_start_z, x_axis_end_z], egui::Stroke::new(1.0, axis_color));
+    painter.line_segment([y_axis_start_z, y_axis_end_z], egui::Stroke::new(1.0, axis_color));
 
     let font_id = egui::FontId::proportional(10.0);
 
@@ -217,30 +201,6 @@ pub fn draw_polyline(
     }
 }
 
-/// データ座標の点列から折れ線を描画する
-///
-/// - `painter`: 描画先
-/// - `graph_rect`: グラフ領域
-/// - `view`: ズーム・パン状態
-/// - `data_points`: (x, y) のデータ座標列
-/// - `data_range`: (min_x, max_x, min_y, max_y)
-/// - `stroke`: 線のスタイル
-pub fn draw_polyline_data(
-    painter: &egui::Painter,
-    graph_rect: egui::Rect,
-    view: &ZoomPanState,
-    data_points: &[(f64, f64)],
-    data_range: (f64, f64, f64, f64),
-    stroke: egui::Stroke,
-) {
-    let screen_points: Vec<egui::Pos2> = data_points
-        .iter()
-        .map(|(x, y)| data_to_screen(*x, *y, data_range, graph_rect))
-        .collect();
-
-    draw_polyline(painter, graph_rect, view, &screen_points, stroke);
-}
-
 // =============================================================================
 // バーチャート描画ヘルパー
 // =============================================================================
@@ -275,7 +235,11 @@ pub fn draw_bar(
     color: egui::Color32,
     rounding: f32,
 ) -> egui::Rect {
-    let center = apply_view_transform(egui::pos2(bar.center_x, bar.center_y), graph_rect, view);
+    let center = apply_view_transform(
+        egui::pos2(bar.center_x, bar.center_y),
+        graph_rect,
+        view,
+    );
 
     let half_w = bar.half_width * view.zoom.max(0.01);
     let half_h = bar.half_height * view.zoom.max(0.01);
@@ -288,20 +252,6 @@ pub fn draw_bar(
     painter.rect_filled(bar_rect, rounding, color);
 
     bar_rect
-}
-
-/// 複数のバーを描画し、ズーム後の矩形リストを返す
-pub fn draw_bars(
-    painter: &egui::Painter,
-    graph_rect: egui::Rect,
-    view: &ZoomPanState,
-    bars: &[BarInfo],
-    color: egui::Color32,
-    rounding: f32,
-) -> Vec<egui::Rect> {
-    bars.iter()
-        .map(|bar| draw_bar(painter, graph_rect, view, bar, color, rounding))
-        .collect()
 }
 
 // =============================================================================
@@ -352,7 +302,10 @@ pub fn pick_closest_point(
 /// - `bar_rects`: ズーム後のバー矩形リスト
 ///
 /// 戻り値: ホバー中のバーのインデックス
-pub fn pick_hovered_bar(hover_pos: Option<egui::Pos2>, bar_rects: &[egui::Rect]) -> Option<usize> {
+pub fn pick_hovered_bar(
+    hover_pos: Option<egui::Pos2>,
+    bar_rects: &[egui::Rect],
+) -> Option<usize> {
     let mouse = hover_pos?;
 
     for (i, rect) in bar_rects.iter().enumerate() {
@@ -401,61 +354,6 @@ pub fn compute_graph_rect(available_rect: egui::Rect, margins: &GraphMargins) ->
     )
 }
 
-// =============================================================================
-// 期待値線（1/log x）描画ヘルパー
-// =============================================================================
-
-/// Density グラフ用の期待値線（interval_size / log(x_mid)）を描画する
-///
-/// - `painter`: 描画先
-/// - `graph_rect`: グラフ領域
-/// - `view`: ズーム・パン状態
-/// - `bins`: (start, count) のリスト（ソート済み）
-/// - `bin_width`: バー幅（Width スケール適用済み）
-/// - `interval_size`: 区間幅
-/// - `max_count`: Y軸の最大値（正規化用）
-/// - `color`: 線の色
-pub fn draw_expected_density_line(
-    painter: &egui::Painter,
-    graph_rect: egui::Rect,
-    view: &ZoomPanState,
-    bins: &[(u64, u64)],
-    bin_width: f32,
-    interval_size: u64,
-    max_count: u64,
-    color: egui::Color32,
-) {
-    if bins.is_empty() || max_count == 0 {
-        return;
-    }
-
-    let mut points: Vec<egui::Pos2> = Vec::with_capacity(bins.len());
-
-    for (i, (start, _)) in bins.iter().enumerate() {
-        let x_mid = (*start as f64) + (interval_size as f64) / 2.0;
-        let expected_count = if x_mid > 1.0 {
-            (interval_size as f64) / x_mid.ln()
-        } else {
-            0.0
-        };
-
-        let i_f = i as f32;
-        let center_x = graph_rect.min.x + (i_f + 0.5) * bin_width;
-        let h = (expected_count as f32 / max_count as f32) * graph_rect.height();
-        let y = graph_rect.max.y - h;
-
-        points.push(egui::pos2(center_x, y));
-    }
-
-    draw_polyline(
-        painter,
-        graph_rect,
-        view,
-        &points,
-        egui::Stroke::new(1.5, color),
-    );
-}
-
 /// 期待値線の標準色（黄色系）
 pub fn expected_line_color() -> egui::Color32 {
     egui::Color32::from_rgb(0xFF, 0xC0, 0x00)
@@ -465,13 +363,22 @@ pub fn expected_line_color() -> egui::Color32 {
 // Spiral 専用ズーム・パン処理
 // =============================================================================
 
-/// Spiral グリッド用のデフォルトズーム設定（広いズーム範囲）
-pub const DEFAULT_SPIRAL_ZOOM_CONFIG: crate::ui_components::ZoomPanConfig =
-    crate::ui_components::ZoomPanConfig {
-        min_zoom: 0.1,
-        max_zoom: 50.0,
-        zoom_speed: 0.001,
-    };
+/// Spiral グリッド用のズーム・パン設定
+pub struct SpiralZoomPanConfig {
+    pub min_zoom: f32,
+    pub max_zoom: f32,
+    pub zoom_speed: f32,
+}
+
+impl Default for SpiralZoomPanConfig {
+    fn default() -> Self {
+        Self {
+            min_zoom: 0.1,
+            max_zoom: 50.0,
+            zoom_speed: 0.001,
+        }
+    }
+}
 
 /// Spiral グリッド用のズーム・パン入力を処理する
 ///
@@ -483,7 +390,7 @@ pub const DEFAULT_SPIRAL_ZOOM_CONFIG: crate::ui_components::ZoomPanConfig =
 /// - `response`: allocate_rect の応答
 /// - `zoom`: 現在のズーム値（更新される）
 /// - `pan_x`, `pan_y`: 現在のパン値（更新される）
-/// - `config`: ズーム設定（`ZoomPanConfig` を使用）
+/// - `config`: ズーム設定
 pub fn handle_spiral_zoom_and_pan_input(
     ui: &egui::Ui,
     rect: egui::Rect,
@@ -491,7 +398,7 @@ pub fn handle_spiral_zoom_and_pan_input(
     zoom: &mut f32,
     pan_x: &mut f32,
     pan_y: &mut f32,
-    config: &crate::ui_components::ZoomPanConfig,
+    config: &SpiralZoomPanConfig,
 ) {
     // マウスホイールでズーム
     if response.hovered() {
@@ -537,7 +444,11 @@ pub struct LegendItem<'a> {
 }
 
 /// 右上に凡例を描画する
-pub fn draw_legend(painter: &egui::Painter, graph_rect: egui::Rect, items: &[LegendItem<'_>]) {
+pub fn draw_legend(
+    painter: &egui::Painter,
+    graph_rect: egui::Rect,
+    items: &[LegendItem<'_>],
+) {
     let font_id = egui::FontId::proportional(11.0);
     let line_height = 16.0;
     let legend_x = graph_rect.max.x - 10.0;
@@ -563,3 +474,4 @@ pub fn draw_legend(painter: &egui::Painter, graph_rect: egui::Rect, items: &[Leg
         y += line_height;
     }
 }
+

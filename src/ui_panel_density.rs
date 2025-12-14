@@ -7,8 +7,8 @@ use crate::ui_components::{
     styled_text_edit, GraphTooltipStyle, ZoomPanState,
 };
 use crate::ui_graph_utils::{
-    compute_graph_rect, draw_axes, draw_expected_density_line, expected_line_color,
-    pick_hovered_bar, AxisLabels, BarInfo, GraphMargins, DEFAULT_ZOOM_CONFIG,
+    compute_graph_rect, draw_axes, draw_polyline, expected_line_color, pick_hovered_bar,
+    AxisLabels, BarInfo, GraphMargins, DEFAULT_ZOOM_CONFIG,
 };
 use crate::ui_theme::{colors, font_sizes, layout};
 
@@ -52,8 +52,8 @@ fn render_density_range_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) {
             ui,
             "Minimum",
             "Maximum",
-            &mut app.density.min_input,
-            &mut app.density.max_input,
+            &mut app.density_min_input,
+            &mut app.density_max_input,
             layout::INPUT_WIDTH_SMALL,
             layout::INPUT_WIDTH_SMALL,
         );
@@ -67,14 +67,14 @@ fn render_density_range_card(ui: &mut egui::Ui, app: &mut MyApp, height: f32) {
             ui.add_space(8.0);
             ui.add_sized(
                 [120.0, layout::INPUT_HEIGHT],
-                styled_text_edit(&mut app.density.interval_input),
+                styled_text_edit(&mut app.density_interval_input),
             );
         });
 
         ui.add_space(8.0);
 
         // Speed スライダー（共通コンポーネント）
-        render_speed_slider(ui, "Speed:", &mut app.density.speed);
+        render_speed_slider(ui, "Speed:", &mut app.density_speed);
     });
 }
 
@@ -83,10 +83,10 @@ fn render_density_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
     card_frame().show(ui, |ui| {
         ui.set_min_height(height);
 
-        let percent = calc_percent(app.density.processed, app.density.total);
+        let percent = calc_percent(app.density_processed, app.density_total);
 
         // 進捗ヘッダー（パーセント + プログレスバー）
-        render_progress_header(ui, percent, app.density.progress);
+        render_progress_header(ui, percent, app.density_progress);
 
         ui.add_space(12.0);
 
@@ -95,8 +95,8 @@ fn render_density_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Intervals"));
                 ui.label(
-                    egui::RichText::new(if app.density.total > 0 {
-                        format!("{} / {}", app.density.processed, app.density.total)
+                    egui::RichText::new(if app.density_total > 0 {
+                        format!("{} / {}", app.density_processed, app.density_total)
                     } else {
                         "—".to_string()
                     })
@@ -110,8 +110,8 @@ fn render_density_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Current interval"));
                 ui.label(
-                    egui::RichText::new(if app.density.running || !app.density.data.is_empty() {
-                        format!("{}", app.density.current_interval)
+                    egui::RichText::new(if app.density_running || !app.density_data.is_empty() {
+                        format!("{}", app.density_current_interval)
                     } else {
                         "—".to_string()
                     })
@@ -125,7 +125,7 @@ fn render_density_progress_card(ui: &mut egui::Ui, app: &MyApp, height: f32) {
             ui.vertical(|ui| {
                 ui.label(field_label("Total primes"));
                 ui.label(
-                    egui::RichText::new(format!("{}", app.density.total_primes))
+                    egui::RichText::new(format!("{}", app.density_total_primes))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_SECONDARY),
                 );
@@ -161,13 +161,13 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                     .add(egui::Button::new("Reset View").min_size(egui::vec2(80.0, 24.0)))
                     .clicked()
                 {
-                    app.density.view = ZoomPanState::default();
-                    app.density.bar_width_scale = 1.0;
+                    app.density_view = ZoomPanState::default();
+                    app.density_bar_width_scale = 1.0;
                 }
 
                 // ズーム率表示
                 ui.label(
-                    egui::RichText::new(format!("{:.0}%", app.density.view.zoom * 100.0))
+                    egui::RichText::new(format!("{:.0}%", app.density_view.zoom * 100.0))
                         .size(font_sizes::LABEL)
                         .color(colors::TEXT_SECONDARY),
                 );
@@ -180,14 +180,14 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                         .size(font_sizes::LABEL)
                         .color(colors::TEXT_SECONDARY),
                 );
-                let mut scale = app.density.bar_width_scale;
+                let mut scale = app.density_bar_width_scale;
                 ui.add(
                     egui::Slider::new(&mut scale, 0.5..=10.0)
                         .show_value(false)
                         .clamping(egui::SliderClamping::Always)
                         .drag_value_speed(0.01),
                 );
-                app.density.bar_width_scale = scale;
+                app.density_bar_width_scale = scale;
             });
         });
 
@@ -199,7 +199,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
 
         painter.rect_filled(rect, 0.0, colors::CARD_BG);
 
-        if app.density.data.is_empty() {
+        if app.density_data.is_empty() {
             painter.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
@@ -210,7 +210,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
             return;
         }
 
-        let mut bins = app.density.data.clone();
+        let mut bins = app.density_data.clone();
         bins.sort_by_key(|(start, _)| *start);
 
         let max_count = bins.iter().map(|(_, c)| *c).max().unwrap_or(1).max(1);
@@ -224,7 +224,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
             ui,
             graph_rect,
             &response,
-            &mut app.density.view,
+            &mut app.density_view,
             &DEFAULT_ZOOM_CONFIG,
         );
 
@@ -232,8 +232,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
 
         // 区間幅（ツールチップ用の密度計算に使用）
         let interval_size = app
-            .density
-            .interval_input
+            .density_interval_input
             .trim()
             .parse::<u64>()
             .unwrap_or(1)
@@ -254,7 +253,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         draw_axes(
             &painter,
             graph_rect,
-            &app.density.view,
+            &app.density_view,
             &axis_labels,
             colors::TEXT_SECONDARY,
         );
@@ -267,7 +266,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
             0.0
         };
         // Width スライダーの効きをさらに強めるため、スケール値を 3 乗で反映する
-        let width_scale = app.density.bar_width_scale.max(0.5);
+        let width_scale = app.density_bar_width_scale.max(0.5);
         let width_factor = width_scale * width_scale * width_scale; // 1.0, 8.0, 27.0, ... 最大 1000
         let bin_width = base_bin_width * width_factor;
 
@@ -298,7 +297,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                 crate::ui_graph_utils::draw_bar(
                     &painter,
                     graph_rect,
-                    &app.density.view,
+                    &app.density_view,
                     bar,
                     colors::ACCENT,
                     2.0,
@@ -306,23 +305,41 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
             })
             .collect();
 
-        // 期待値線（理論密度 1/log x に基づく平均線）を描画（共通ヘルパー）
+        // 期待値線（理論密度 1/log x に基づく平均線）を描画
         if interval_size > 0 {
-            draw_expected_density_line(
+            let expected_points: Vec<egui::Pos2> = bins
+                .iter()
+                .enumerate()
+                .map(|(i, (start, _))| {
+                    let i_f = i as f32;
+                    let x_center = graph_rect.min.x + (i_f + 0.5) * bin_width;
+                    let x_mid = start.saturating_add(interval_size / 2).max(2);
+                    let x_mid_f = x_mid as f64;
+                    let expected_density = if x_mid_f > 1.0 {
+                        1.0 / x_mid_f.ln()
+                    } else {
+                        0.0
+                    };
+                    let expected_count = expected_density * interval_size as f64;
+                    let h = (expected_count as f32 / max_count as f32) * graph_rect.height();
+                    let y = graph_rect.max.y - h;
+                    egui::pos2(x_center, y)
+                })
+                .collect();
+
+            draw_polyline(
                 &painter,
                 graph_rect,
-                &app.density.view,
-                &bins,
-                bin_width,
-                interval_size,
-                max_count,
-                expected_line_color(),
+                &app.density_view,
+                &expected_points,
+                egui::Stroke::new(1.5, expected_line_color()),
             );
         }
 
         // ホバー判定（共通ヘルパー）
-        let hover_info: Option<(egui::Pos2, String)> =
-            pick_hovered_bar(hover_pos, &bar_rects).map(|idx| {
+        // `hover_pos` が None のケースでも `unwrap()` しないように安全側に倒す。
+        let hover_info: Option<(egui::Pos2, String)> = hover_pos.and_then(|pos| {
+            pick_hovered_bar(Some(pos), &bar_rects).map(|idx| {
                 let (start, count) = bins[idx];
                 let end = start.saturating_add(interval_size.saturating_sub(1));
                 let density = count as f64 / interval_size as f64;
@@ -330,8 +347,9 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                     "[{}, {}]\ncount = {}, density = {:.6}",
                     start, end, count, density
                 );
-                (hover_pos.unwrap(), text)
-            });
+                (pos, text)
+            })
+        });
 
         // ツールチップ描画（カードのクリップに制限されないよう、画面全体ペインタを使用）
         if let Some((pos, text)) = hover_info {
@@ -345,7 +363,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         // ------------------------------------------------------------------
         // バー幅を大きくしたときにグラフ全体が横に非常に長くなるため、
         // 端から端まで一気に移動できるようにする。
-        let zoom = app.density.view.zoom.max(0.01);
+        let zoom = app.density_view.zoom.max(0.01);
         let content_left = graph_rect.min.x + bin_width * 0.1;
         let content_right = graph_rect.min.x + bin_width * bin_count - bin_width * 0.1;
         let content_width = (content_right - content_left).max(1.0);
@@ -355,7 +373,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         if content_width > view_width_pre * 1.05 {
             let center = graph_rect.center();
             // 現在のパン量から「ズーム前の画面中心座標」を逆算
-            let center_pre = center.x - app.density.view.pan_x / zoom;
+            let center_pre = center.x - app.density_view.pan_x / zoom;
             let left_view_pre = center_pre - view_width_pre * 0.5;
             let max_offset = (content_width - view_width_pre).max(0.0);
 
@@ -381,7 +399,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                     let left_view_pre_new = content_left + max_offset * nav_pos;
                     let center_pre_new = left_view_pre_new + view_width_pre * 0.5;
                     let dx_pre = center_pre_new - center.x;
-                    app.density.view.pan_x = -dx_pre * zoom;
+                    app.density_view.pan_x = -dx_pre * zoom;
                 }
             });
         }
@@ -397,7 +415,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
         ui.label(section_title("Statistics"));
         ui.add_space(8.0);
 
-        if app.density.data.is_empty() {
+        if app.density_data.is_empty() {
             ui.label(
                 egui::RichText::new("No data yet")
                     .size(font_sizes::LABEL)
@@ -408,15 +426,22 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
 
         // 区間幅とレンジを取得
         let interval_size = app
-            .density
-            .interval_input
+            .density_interval_input
             .trim()
             .parse::<u64>()
             .unwrap_or(1)
             .max(1);
 
-        let min_x = app.density.min_input.trim().parse::<u64>().unwrap_or(0);
-        let max_x = app.density.max_input.trim().parse::<u64>().unwrap_or(min_x);
+        let min_x = app
+            .density_min_input
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(0);
+        let max_x = app
+            .density_max_input
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(min_x);
 
         let range_len = if max_x > min_x {
             (max_x - min_x) as f64
@@ -424,7 +449,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
             1.0
         };
 
-        let mut bins = app.density.data.clone();
+        let mut bins = app.density_data.clone();
         bins.sort_by_key(|(start, _)| *start);
 
         let n_intervals = bins.len() as u64;
@@ -592,3 +617,5 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
         });
     });
 }
+
+

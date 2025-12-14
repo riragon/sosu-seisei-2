@@ -20,30 +20,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WorkerMessage {
     Log(String),
-    Progress {
-        current: u64,
-        total: u64,
-    },
+    Progress { current: u64, total: u64 },
     Eta(String),
     MemUsage(u64),
     Done,
     Stopped,
     /// Explore モード用: (x, π(x)) のデータポイント
-    ExploreData {
-        x: u64,
-        pi_x: u64,
-    },
+    ExploreData { x: u64, pi_x: u64 },
     /// Gap モード用: 新しい素数とその直前の素数との差（ギャップ）
-    GapData {
-        prime: u64,
-        prev_prime: u64,
-        gap: u64,
-    },
+    GapData { prime: u64, prev_prime: u64, gap: u64 },
     /// Density モード用: 区間の開始位置と素数個数
-    DensityData {
-        interval_start: u64,
-        count: u64,
-    },
+    DensityData { interval_start: u64, count: u64 },
     /// Spiral モード用: 素数フラグ配列（ステップ順一次元列）
     ///
     /// - `primes.len()` は通常 `size * size` 以上（生成時に上限サイズで確保）。
@@ -51,10 +38,7 @@ pub enum WorkerMessage {
     ///   その値が素数なら `primes[k] == true` になります。
     /// - グリッド上のどのセルに配置するかは UI 側（スクエア / ハニカム等）が
     ///   この一次元列をそれぞれの座標系にマッピングして決めます。
-    SpiralData {
-        primes: Vec<bool>,
-        size: usize,
-    },
+    SpiralData { primes: Vec<bool>, size: usize },
 }
 
 /// ETA（残り時間の秒数）を人間が読みやすい文字列にフォーマットするヘルパー。
@@ -95,3 +79,4 @@ pub fn format_eta(eta_secs: Option<u64>) -> String {
         }
     }
 }
+
