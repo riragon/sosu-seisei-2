@@ -24,13 +24,20 @@ GUI は `egui` / `eframe`、素数計数（π(x)）は高速ライブラリ `pri
 
 ## スクリーンショット
 
-ここにスクリーンショットを挿入してください（おすすめ順）:
-
 1. Generator（設定画面＋実行ログ）
+![bandicam 2025-12-14 21-36-24-348](https://github.com/user-attachments/assets/67914703-f489-4ce5-8dd2-1ce0127bf9c1)
+
 2. π(x)（π(x) vs \(x/\log x\) または Ratio）
+![bandicam 2025-12-14 21-38-24-816](https://github.com/user-attachments/assets/745905b8-2f49-4e77-919b-e00d566d947a)
+
 3. Gap（ヒストグラム＋統計）
+![bandicam 2025-12-14 21-39-11-632](https://github.com/user-attachments/assets/ca3a55df-8244-4a39-aeb9-0f55951bb193)
+
 4. Density（密度＋統計）
+![bandicam 2025-12-14 21-39-37-993](https://github.com/user-attachments/assets/08cb0761-69dd-4963-a32a-0a75ca359561)
+
 5. Spiral（全体像）
+![bandicam 2025-12-14 21-39-58-240](https://github.com/user-attachments/assets/9dd6c2da-08b7-4ebd-8d93-0f4756c04d86)
 
 ---
 
