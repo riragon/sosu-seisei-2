@@ -6,14 +6,16 @@
 
 use eframe::egui;
 
-use crate::app::{AppTab, MyApp};
+use crate::analyze::ui_analyze::render_analyze_panel;
+use crate::analyze::AnalyzeTab;
+use crate::app::{AppMode, AppTab, MyApp};
 use crate::config::{OutputFormat, WheelType};
+use crate::seisei::ui_density::render_density_panel;
+use crate::seisei::ui_explore::render_explore_panel;
+use crate::seisei::ui_gap::render_gap_panel;
+use crate::seisei::ui_generator::render_generator_panel;
+use crate::seisei::ui_spiral::render_spiral_panel;
 use crate::ui_components::{field_label, section_title, styled_text_edit};
-use crate::ui_panel_density::render_density_panel;
-use crate::ui_panel_explore::render_explore_panel;
-use crate::ui_panel_gap::render_gap_panel;
-use crate::ui_panel_generator::render_generator_panel;
-use crate::ui_panel_spiral::render_spiral_panel;
 use crate::ui_theme::{colors, font_sizes, layout};
 
 /// ヘッダーパネルを描画
@@ -26,17 +28,54 @@ pub fn render_header(app: &mut MyApp, ctx: &egui::Context) {
         )
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                // タイトル
-                ui.label(
-                    egui::RichText::new("Sosu-Seisei")
-                        .size(font_sizes::TITLE)
-                        .color(colors::TEXT_PRIMARY),
-                );
+                // タイトル（クリックでモード切り替え）
+                let title_text = match app.analyze_mode {
+                    AppMode::Seisei => "Sosu-Seisei",
+                    AppMode::Analyze => "Sosu-Analyze",
+                };
+                let title_clicked = ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new(title_text)
+                                .size(font_sizes::TITLE)
+                                .color(colors::TEXT_PRIMARY),
+                        )
+                        .frame(false),
+                    )
+                    .clicked();
+                if title_clicked {
+                    if app.is_running {
+                        app.log
+                            .push_str("Cannot switch app mode while a computation is running.\n");
+                    } else {
+                        app.analyze_mode = match app.analyze_mode {
+                            AppMode::Seisei => AppMode::Analyze,
+                            AppMode::Analyze => AppMode::Seisei,
+                        };
+                        // モード切替時は Generator のオプションウィンドウを閉じる
+                        app.show_advanced_options = false;
+                    }
+                }
 
                 ui.add_space(16.0);
 
-                // タブボタン: Generator / Explore / Gap / Density / Spiral
-                render_tab_buttons(app, ui);
+                // タブボタン（Seisei のみ）
+                if app.analyze_mode == AppMode::Seisei {
+                    render_tab_buttons(app, ui);
+                } else {
+                    let label = match app.analyze.current_tab {
+                        AnalyzeTab::LastDigit => "LastDigit",
+                        AnalyzeTab::Mod30 => "Mod30 Trans",
+                        AnalyzeTab::Mod30PRHS => "mod 30 PRHS",
+                        AnalyzeTab::Mod210PRHS => "mod 210 PRHS",
+                        AnalyzeTab::Validation => "Validation",
+                    };
+                    ui.label(
+                        egui::RichText::new(label)
+                            .size(font_sizes::BODY)
+                            .color(colors::TEXT_SECONDARY),
+                    );
+                }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     render_header_buttons(app, ui);
@@ -91,11 +130,12 @@ fn tab_button(ui: &mut egui::Ui, label: &str, selected: bool) -> bool {
 fn render_header_buttons(app: &mut MyApp, ui: &mut egui::Ui) {
     let button_size = egui::vec2(90.0, layout::BUTTON_HEIGHT);
     let run_button_size = egui::vec2(100.0, layout::BUTTON_HEIGHT);
+    let all_run_button_size = egui::vec2(110.0, layout::BUTTON_HEIGHT);
 
     ui.add_space(8.0);
 
     // Options ボタン（Generator モードのみ表示）
-    if app.current_tab == AppTab::Generator {
+    if app.analyze_mode == AppMode::Seisei && app.current_tab == AppTab::Generator {
         if ui
             .add(egui::Button::new("Options").min_size(button_size))
             .clicked()
@@ -107,6 +147,21 @@ fn render_header_buttons(app: &mut MyApp, ui: &mut egui::Ui) {
 
     // Run / Stop ボタン
     if !app.is_running {
+        // Analyze モードのみ: All Run（全タブ実行 + 自動保存）
+        if app.analyze_mode == AppMode::Analyze {
+            if ui
+                .add(
+                    egui::Button::new(egui::RichText::new("All Run").color(egui::Color32::WHITE))
+                        .fill(colors::ACCENT)
+                        .min_size(all_run_button_size),
+                )
+                .clicked()
+            {
+                app.start_all_run();
+            }
+            ui.add_space(8.0);
+        }
+
         if ui
             .add(
                 egui::Button::new(egui::RichText::new("Run").color(egui::Color32::WHITE))
@@ -115,13 +170,16 @@ fn render_header_buttons(app: &mut MyApp, ui: &mut egui::Ui) {
             )
             .clicked()
         {
-            // タブに応じて異なる処理を実行
-            match app.current_tab {
-                AppTab::Generator => app.start_worker(),
-                AppTab::Explore => app.start_explore(),
-                AppTab::Gap => app.start_gap(),
-                AppTab::Density => app.start_density(),
-                AppTab::Spiral => app.start_spiral(),
+            // モード／タブに応じて異なる処理を実行
+            match app.analyze_mode {
+                AppMode::Analyze => app.start_analyze(),
+                AppMode::Seisei => match app.current_tab {
+                    AppTab::Generator => app.start_worker(),
+                    AppTab::Explore => app.start_explore(),
+                    AppTab::Gap => app.start_gap(),
+                    AppTab::Density => app.start_density(),
+                    AppTab::Spiral => app.start_spiral(),
+                },
             }
         }
     } else if ui
@@ -135,10 +193,40 @@ fn render_header_buttons(app: &mut MyApp, ui: &mut egui::Ui) {
         app.stop_flag
             .store(true, std::sync::atomic::Ordering::SeqCst);
     }
+
+    // All Run 進捗表示（Analyze モードのみ）
+    if app.analyze_mode == AppMode::Analyze && app.analyze.all_run_mode {
+        ui.add_space(12.0);
+        let total = app.analyze.all_run_completed.len()
+            + app.analyze.all_run_pending.len()
+            + if app.analyze.running { 1 } else { 0 };
+        let total = total.max(5); // 期待値（固定5タブ）
+        let done = app.analyze.all_run_completed.len();
+        let tab = match app.analyze.current_tab {
+            AnalyzeTab::LastDigit => "LastDigit",
+            AnalyzeTab::Mod30 => "Mod30",
+            AnalyzeTab::Mod30PRHS => "Mod30PRHS",
+            AnalyzeTab::Mod210PRHS => "Mod210PRHS",
+            AnalyzeTab::Validation => "Validation",
+        };
+        let status = if app.analyze.running {
+            format!("All Run: {done}/{total} (running {tab})")
+        } else {
+            format!("All Run: {done}/{total}")
+        };
+        ui.label(
+            egui::RichText::new(status)
+                .size(font_sizes::LABEL)
+                .color(colors::TEXT_SECONDARY),
+        );
+    }
 }
 
 /// Advanced Options ウィンドウを描画
 pub fn render_advanced_options_window(app: &mut MyApp, ctx: &egui::Context) {
+    if app.analyze_mode != AppMode::Seisei {
+        return;
+    }
     if !app.show_advanced_options {
         return;
     }
@@ -267,13 +355,14 @@ fn render_advanced_options_fields(app: &mut MyApp, ui: &mut egui::Ui) {
 
 /// メインパネル（タブに応じて Generator / Explore / Gap / Density / Spiral を描画）
 pub fn render_main_panel(app: &mut MyApp, ctx: &egui::Context) {
-    match app.current_tab {
-        AppTab::Generator => render_generator_panel(app, ctx),
-        AppTab::Explore => render_explore_panel(app, ctx),
-        AppTab::Gap => render_gap_panel(app, ctx),
-        AppTab::Density => render_density_panel(app, ctx),
-        AppTab::Spiral => render_spiral_panel(app, ctx),
+    match app.analyze_mode {
+        AppMode::Analyze => render_analyze_panel(app, ctx),
+        AppMode::Seisei => match app.current_tab {
+            AppTab::Generator => render_generator_panel(app, ctx),
+            AppTab::Explore => render_explore_panel(app, ctx),
+            AppTab::Gap => render_gap_panel(app, ctx),
+            AppTab::Density => render_density_panel(app, ctx),
+            AppTab::Spiral => render_spiral_panel(app, ctx),
+        },
     }
 }
-
-

@@ -242,7 +242,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         let n_bins = bins.len();
         let axis_labels = if n_bins > 0 {
             AxisLabels {
-                y_max: format!("{}", max_count),
+                y_max: format!("{max_count}"),
                 y_min: "0".to_string(),
                 x_min: format!("{}", bins.first().map(|(s, _)| *s).unwrap_or(0)),
                 x_max: format!("{}", bins.last().map(|(s, _)| *s).unwrap_or(0)),
@@ -343,10 +343,7 @@ fn render_density_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                 let (start, count) = bins[idx];
                 let end = start.saturating_add(interval_size.saturating_sub(1));
                 let density = count as f64 / interval_size as f64;
-                let text = format!(
-                    "[{}, {}]\ncount = {}, density = {:.6}",
-                    start, end, count, density
-                );
+                let text = format!("[{start}, {end}]\ncount = {count}, density = {density:.6}");
                 (pos, text)
             })
         });
@@ -432,16 +429,8 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
             .unwrap_or(1)
             .max(1);
 
-        let min_x = app
-            .density_min_input
-            .trim()
-            .parse::<u64>()
-            .unwrap_or(0);
-        let max_x = app
-            .density_max_input
-            .trim()
-            .parse::<u64>()
-            .unwrap_or(min_x);
+        let min_x = app.density_min_input.trim().parse::<u64>().unwrap_or(0);
+        let max_x = app.density_max_input.trim().parse::<u64>().unwrap_or(min_x);
 
         let range_len = if max_x > min_x {
             (max_x - min_x) as f64
@@ -537,7 +526,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
             columns[0].vertical(|ui| {
                 ui.label(field_label("Total primes"));
                 ui.label(
-                    egui::RichText::new(format!("{}", total_primes))
+                    egui::RichText::new(format!("{total_primes}"))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -546,7 +535,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
 
                 ui.label(field_label("Average density (overall)"));
                 ui.label(
-                    egui::RichText::new(format!("{:.6}", avg_density_overall))
+                    egui::RichText::new(format!("{avg_density_overall:.6}"))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -555,7 +544,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
 
                 ui.label(field_label("Expected density"));
                 ui.label(
-                    egui::RichText::new(format!("{:.6}  (x_mid = {})", expected_density, x_mid))
+                    egui::RichText::new(format!("{expected_density:.6}  (x_mid = {x_mid})"))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -564,7 +553,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
 
                 ui.label(field_label("Empirical / Expected"));
                 ui.label(
-                    egui::RichText::new(format!("{:.4}", emp_over_exp))
+                    egui::RichText::new(format!("{emp_over_exp:.4}"))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -574,7 +563,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
             columns[1].vertical(|ui| {
                 ui.label(field_label("Average density (first 10%)"));
                 ui.label(
-                    egui::RichText::new(format!("{:.6}", avg_density_first))
+                    egui::RichText::new(format!("{avg_density_first:.6}"))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -583,7 +572,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
 
                 ui.label(field_label("Average density (last 10%)"));
                 ui.label(
-                    egui::RichText::new(format!("{:.6}", avg_density_last))
+                    egui::RichText::new(format!("{avg_density_last:.6}"))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -593,7 +582,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
                 ui.label(field_label("Max density"));
                 ui.label(
                     egui::RichText::new(if let Some((s, e)) = max_interval {
-                        format!("{:.6}\n[{}, {}]", max_density, s, e)
+                        format!("{max_density:.6}\n[{s}, {e}]")
                     } else {
                         "—".to_string()
                     })
@@ -606,7 +595,7 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
                 ui.label(field_label("Min density (non-zero)"));
                 ui.label(
                     egui::RichText::new(if let Some((s, e)) = min_interval {
-                        format!("{:.6}\n[{}, {}]", min_density, s, e)
+                        format!("{min_density:.6}\n[{s}, {e}]")
                     } else {
                         "—".to_string()
                     })
@@ -617,5 +606,3 @@ fn render_density_stats(ui: &mut egui::Ui, app: &MyApp) {
         });
     });
 }
-
-

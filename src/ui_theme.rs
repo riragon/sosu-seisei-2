@@ -63,5 +63,3 @@ pub mod layout {
     /// 中サイズ入力欄の標準幅
     pub const INPUT_WIDTH_MEDIUM: f32 = 150.0;
 }
-
-

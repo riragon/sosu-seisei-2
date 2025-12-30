@@ -114,7 +114,11 @@ impl OutputMetadata {
         writeln!(writer, "split_count = {}", cfg.split_count)?;
         writeln!(writer, "last_prime_only = {}", cfg.last_prime_only)?;
         writeln!(writer, "wheel_type = {:?}", cfg.wheel_type)?;
-        writeln!(writer, "memory_usage_percent = {}", cfg.memory_usage_percent)?;
+        writeln!(
+            writer,
+            "memory_usage_percent = {}",
+            cfg.memory_usage_percent
+        )?;
         writer.flush()?;
 
         Ok(meta_path)
@@ -324,5 +328,3 @@ impl PrimeWriter for LastPrimeWriter {
         Ok(())
     }
 }
-
-

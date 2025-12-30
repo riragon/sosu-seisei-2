@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use sosu_seisei_main2::prime_pi_engine::compute_prime_pi;
+use sosu_seisei_main2::seisei::prime_pi_engine::compute_prime_pi;
 
 /// primecount ベースの π(x) の簡易ベンチマーク。
 ///
@@ -30,10 +30,7 @@ fn main() {
         match compute_prime_pi(x) {
             Ok(pi) => {
                 let elapsed = start.elapsed();
-                println!(
-                    "  pi({x}) = {pi}  (elapsed: {:.3?})",
-                    elapsed
-                );
+                println!("  pi({x}) = {pi}  (elapsed: {:.3?})", elapsed);
             }
             Err(e) => {
                 println!("  Error while computing pi({x}): {e}");
@@ -42,5 +39,3 @@ fn main() {
         println!();
     }
 }
-
-

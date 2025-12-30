@@ -195,20 +195,12 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         }
 
         // 全ギャップ統計（ランキング用）
-        let mut all_freq: Vec<(u64, u64)> = app
-            .gap_data
-            .iter()
-            .map(|(&g, &c)| (g, c))
-            .collect();
+        let mut all_freq: Vec<(u64, u64)> = app.gap_data.iter().map(|(&g, &c)| (g, c)).collect();
         all_freq.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let total_gaps: u64 = all_freq.iter().map(|(_, c)| *c).sum();
 
         // ヒストグラム描画用（x 軸順にソート）
-        let mut bins: Vec<(u64, u64)> = app
-            .gap_data
-            .iter()
-            .map(|(g, c)| (*g, *c))
-            .collect();
+        let mut bins: Vec<(u64, u64)> = app.gap_data.iter().map(|(g, c)| (*g, *c)).collect();
         bins.sort_by_key(|(g, _)| *g);
 
         if bins.is_empty() {
@@ -236,7 +228,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
         let n_bins = bins.len();
         let axis_labels = if n_bins > 0 {
             AxisLabels {
-                y_max: format!("{}", max_count),
+                y_max: format!("{max_count}"),
                 y_min: "0".to_string(),
                 x_min: format!("{}", bins.first().map(|(g, _)| *g).unwrap_or(0)),
                 x_max: format!("{}", bins.last().map(|(g, _)| *g).unwrap_or(0)),
@@ -317,7 +309,7 @@ fn render_gap_histogram(ui: &mut egui::Ui, app: &mut MyApp) {
                 } else {
                     0.0
                 };
-                let text = format!("gap = {}\ncount = {} ({:.2}%)", gap, count, ratio);
+                let text = format!("gap = {gap}\ncount = {count} ({ratio:.2}%)");
                 (pos, text)
             })
         });
@@ -385,11 +377,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
         let mut mode_count: u64 = 0;
         let mut twin_count: u64 = 0;
 
-        let mut sorted: Vec<(u64, u64)> = app
-            .gap_data
-            .iter()
-            .map(|(&g, &c)| (g, c))
-            .collect();
+        let mut sorted: Vec<(u64, u64)> = app.gap_data.iter().map(|(&g, &c)| (g, c)).collect();
         sorted.sort_by_key(|(g, _)| *g);
 
         for (gap, count) in sorted.iter() {
@@ -451,7 +439,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
 
                 ui.label(field_label("Gaps count"));
                 ui.label(
-                    egui::RichText::new(format!("{}", total_gaps))
+                    egui::RichText::new(format!("{total_gaps}"))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -505,7 +493,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
 
                 ui.label(field_label("Average gap"));
                 ui.label(
-                    egui::RichText::new(format!("{:.2}", avg_gap))
+                    egui::RichText::new(format!("{avg_gap:.2}"))
                         .size(font_sizes::BODY)
                         .color(colors::TEXT_PRIMARY),
                 );
@@ -515,7 +503,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
                 ui.label(field_label("Median gap"));
                 ui.label(
                     egui::RichText::new(if total_gaps > 0 {
-                        format!("{}", median_gap)
+                        format!("{median_gap}")
                     } else {
                         "—".to_string()
                     })
@@ -528,7 +516,7 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
                 ui.label(field_label("Mode gap"));
                 ui.label(
                     egui::RichText::new(if mode_count > 0 {
-                        format!("{} ({} times)", mode_gap, mode_count)
+                        format!("{mode_gap} ({mode_count} times)")
                     } else {
                         "—".to_string()
                     })
@@ -539,5 +527,3 @@ fn render_gap_stats(ui: &mut egui::Ui, app: &MyApp) {
         });
     });
 }
-
-

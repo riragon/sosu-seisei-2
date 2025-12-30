@@ -101,5 +101,3 @@ pub fn save_config(cfg: &Config) -> Result<(), Box<dyn std::error::Error + Send 
     writer.write_all(toml_str.as_bytes())?;
     Ok(())
 }
-
-

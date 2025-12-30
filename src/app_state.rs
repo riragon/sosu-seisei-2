@@ -6,11 +6,16 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use eframe::CreationContext;
 use sysinfo::System;
 
+use crate::analyze::tab_last_digit::LastDigitResult;
+use crate::analyze::tab_mod30::Mod30Result;
+use crate::analyze::tab_prhs::{PRHS210Result, PRHSResult};
+use crate::analyze::tab_validation::ValidationBundle;
+use crate::analyze::{AnalyzeTab, PRHSBinMode};
 use crate::app_style::setup_style;
 use crate::config::{load_or_create_config, Config, OutputFormat, WheelType};
 use crate::ui_components::ZoomPanState;
@@ -26,6 +31,94 @@ pub enum AppTab {
     Spiral,
 }
 
+/// アプリケーションのモード（生成アプリ / 分析アプリ）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AppMode {
+    /// Sosu-Seisei（素数生成）
+    #[default]
+    Seisei,
+    /// Sosu-Analyze（素数分析）
+    Analyze,
+}
+
+/// Sosu-Analyze モードの状態をまとめた構造体。
+#[derive(Debug, Default, Clone)]
+pub struct AnalyzeState {
+    // === 共通 ===
+    /// 入力ファイル（バイナリ primes）パス
+    pub file_path: String,
+    /// 分析が実行中かどうか
+    pub running: bool,
+    /// 進捗（0.0〜1.0）
+    pub progress: f32,
+    /// 入力ファイルが選択済みかどうか
+    pub file_loaded: bool,
+    /// 読み込んだ素数（レコード）総数（集計対象はタブ定義に従う）
+    pub total_primes: u64,
+    /// Analyze 内の現在タブ
+    pub current_tab: AnalyzeTab,
+
+    // === All Run（全タブ一括実行） ===
+    /// All Run 実行中フラグ（Analyze の全タブを順次実行して自動保存）
+    pub all_run_mode: bool,
+    /// All Run: 未実行（キュー）
+    pub all_run_pending: Vec<AnalyzeTab>,
+    /// All Run: 完了済み
+    pub all_run_completed: Vec<AnalyzeTab>,
+
+    // === 各分析結果（サブ構造体） ===
+    /// 末尾 1/3/7/9 の出現率 + 遷移行列
+    pub last_digit: LastDigitResult,
+    /// mod 30（{1,7,11,13,17,19,23,29}）の分析結果
+    pub mod30: Mod30Result,
+    /// mod 30 PRHS（一次 vs 二次マルコフ）分析結果
+    pub prhs: PRHSResult,
+    /// mod 210 PRHS（一次 vs 二次マルコフ）分析結果
+    pub prhs210: PRHS210Result,
+    /// Validation（整合性・理論値・wheel比較）: mod30 + mod210 を同時計算
+    pub validation: ValidationBundle,
+
+    // === PRHS 表示/設定（UI用） ===
+    /// PRHS のビン表示モード（ログ / 等量）
+    pub prhs_view_bin_mode: PRHSBinMode,
+    /// PRHS で選択中のビン（表示用）
+    pub prhs_selected_bin: usize,
+    /// 対数ビン幅（log10(p) の幅）入力
+    pub prhs_log10_bin_width_input: String,
+    /// 等量ビン: 1ビンあたりの素数数（フィルタ後）入力
+    pub prhs_equal_bin_primes_input: String,
+    /// 学習比率（train_ratio）入力
+    pub prhs_train_ratio_input: String,
+
+    // === リアルタイム更新（共有メモリ） ===
+    /// リアルタイム更新用の共有結果（ワーカーが更新、UI が読み取り）
+    pub shared_result: Arc<Mutex<LastDigitResult>>,
+    /// リアルタイム表示用の「累計（集計対象）」カウント
+    pub shared_processed: Arc<Mutex<u64>>,
+    /// mod 30 リアルタイム更新用の共有結果
+    pub shared_mod30: Arc<Mutex<Mod30Result>>,
+    /// mod 30 PRHS リアルタイム更新用の共有結果
+    pub shared_prhs: Arc<Mutex<PRHSResult>>,
+    /// mod 210 PRHS リアルタイム更新用の共有結果
+    pub shared_prhs210: Arc<Mutex<PRHS210Result>>,
+    /// Validation リアルタイム更新用の共有結果
+    pub shared_validation: Arc<Mutex<ValidationBundle>>,
+
+    // === Validation 設定（UI用） ===
+    /// Wheel 比較のサンプル数（空/不正は「素数側の triplets と同数」）
+    pub validation_wheel_samples_input: String,
+    /// 乱数シード（空/不正はデフォルト）
+    pub validation_seed_input: String,
+    /// 範囲依存性：max p のリスト（例: "1e6,1e7,1e8" / "1000000,10000000"）
+    pub validation_ranges_input: String,
+
+    // === PRHS 表示オプション ===
+    /// Top Contexts 表示で対角成分（i==j）を除外する
+    pub prhs_exclude_diagonal: bool,
+    /// Top Contexts の最小サンプル数 N_ij（空/不正は 0）
+    pub prhs_min_context_nij_input: String,
+}
+
 /// Spiral ビューのグリッド形状（通常のウラム螺旋 or 六角形ハニカム螺旋）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SpiralGridShape {
@@ -36,11 +129,126 @@ pub enum SpiralGridShape {
     Hex,
 }
 
+/// Spiral ビューの「数列モード」。
+///
+/// - `All`: 通常のウラム螺旋（`center, center+1, ...`）
+/// - `Candidates1379`: 末尾が 1/3/7/9 の数だけを連番として使う（2/4/5/6/8/0 末尾は存在しない）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SpiralNumberMode {
+    /// 通常の連番（`center, center+1, ...`）
+    #[default]
+    All,
+    /// 末尾が 1/3/7/9 の候補数列（2 と 5 の倍数を除外）
+    Candidates1379,
+}
+
+/// Spiral ビューの「判定モード」。
+///
+/// - `Prime`: 実際に素数判定して塗る
+/// - `Random`: 素数定理の密度（約 `factor/ln(n)`）に従ってランダムに塗る
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SpiralPrimeMode {
+    /// 実際の素数判定
+    #[default]
+    Prime,
+    /// 素数密度に従うランダム（理論分布）
+    Random,
+}
+
+/// `n` が「末尾 1/3/7/9」の候補かどうか。
+pub fn is_candidate_1379(n: u64) -> bool {
+    matches!(n % 10, 1 | 3 | 7 | 9)
+}
+
+/// `n` 以上の最小の「末尾 1/3/7/9」候補へ丸める。
+///
+/// 例: 1→1, 2→3, 4→7, 8→9, 10→11
+pub fn next_candidate_1379(n: u64) -> u64 {
+    let q = n / 10;
+    let r = n % 10;
+    match r {
+        0 | 1 => q.saturating_mul(10).saturating_add(1),
+        2 | 3 => q.saturating_mul(10).saturating_add(3),
+        4..=7 => q.saturating_mul(10).saturating_add(7),
+        8 | 9 => q.saturating_mul(10).saturating_add(9),
+        _ => n, // unreachable
+    }
+}
+
+/// 末尾 1/3/7/9 の候補 `n` を 0-based の rank に変換する。
+///
+/// - `n = 10q + r (r∈{1,3,7,9})` のとき `rank = 4q + idx(r)`。
+pub fn rank_of_candidate_1379(n: u64) -> u64 {
+    debug_assert!(is_candidate_1379(n));
+    let q = n / 10;
+    let r = n % 10;
+    let idx = match r {
+        1 => 0,
+        3 => 1,
+        7 => 2,
+        9 => 3,
+        _ => 0, // debug_assert により到達しない想定
+    };
+    q.saturating_mul(4).saturating_add(idx)
+}
+
+/// 0-based の rank から候補値（末尾 1/3/7/9）へ変換する。
+///
+/// - `rank = 4q + i` のとき `value = 10q + residues[i]`。
+pub fn candidate_1379_of_rank(rank: u64) -> u64 {
+    const RESIDUES: [u64; 4] = [1, 3, 7, 9];
+    let q = rank / 4;
+    let i = (rank % 4) as usize;
+    q.saturating_mul(10).saturating_add(RESIDUES[i])
+}
+
+/// Spiral の `step`（0-based, 連番セル）に対応する実際の値を返す。
+pub fn spiral_value_at_step(mode: SpiralNumberMode, center: u64, step: u64) -> u64 {
+    match mode {
+        SpiralNumberMode::All => center.saturating_add(step),
+        SpiralNumberMode::Candidates1379 => {
+            let base = next_candidate_1379(center);
+            let base_rank = rank_of_candidate_1379(base);
+            candidate_1379_of_rank(base_rank.saturating_add(step))
+        }
+    }
+}
+
+/// 素数定理の密度（約 `factor / ln(n)`）に従ってランダムに「塗る」かどうかを返す。
+///
+/// - `All`: factor = 1.0（密度 ≈ 1/ln(n)）
+/// - `Candidates1379`: factor = 2.5（候補集合に条件付けた密度 ≈ 2.5/ln(n)）
+///
+/// 注意:
+/// - 小さい n では 1/ln(n) が 1 を超えるため、確率は [0,1] にクランプします。
+/// - n < 2 は ln が定義できないので常に false にします。
+pub fn random_by_prime_density(n: u64, number_mode: SpiralNumberMode) -> bool {
+    if n < 2 {
+        return false;
+    }
+    let nf = n as f64;
+    let ln = nf.ln();
+    if ln <= 0.0 {
+        return false;
+    }
+    let factor = match number_mode {
+        SpiralNumberMode::All => 1.0,
+        SpiralNumberMode::Candidates1379 => 10.0 / 4.0, // = 2.5
+    };
+    let p = (factor / ln).clamp(0.0, 1.0);
+    fastrand::f64() < p
+}
+
 pub struct MyApp {
     pub config: Config,
     pub is_running: bool,
     pub log: String,
     pub receiver: Option<std::sync::mpsc::Receiver<crate::worker_message::WorkerMessage>>,
+
+    /// アプリ全体のモード（Sosu-Seisei / Sosu-Analyze）
+    pub analyze_mode: AppMode,
+    /// Sosu-Analyze の状態
+    pub analyze: AnalyzeState,
 
     pub prime_min_input: String,
     pub prime_max_input: String,
@@ -135,8 +343,10 @@ pub struct MyApp {
     /// Spiral モード用素数フラグ
     ///
     /// - `spiral_primes.len()` はおおむね `spiral_size * spiral_size`。
-    /// - インデックス `k` は整数値 `n = spiral_center + k` に対応し、
-    ///   その値が素数なら `spiral_primes[k] == true` になる。
+    /// - インデックス `k` は「スパイラル上の連番セル（step）」に対応する。
+    /// - 実際の整数値 `n` は `spiral_number_mode`（All / Candidates）に応じて決まり、
+    ///   `spiral_prime_mode`（Prime / Random）に応じて「素数」または「ランダムでマーク」
+    ///   された場合に `spiral_primes[k] == true` になる。
     pub spiral_primes: Vec<bool>,
     pub spiral_generated: bool,
     pub spiral_speed: f32,
@@ -148,6 +358,10 @@ pub struct MyApp {
     pub spiral_pan_y: f32, // パン（移動）のオフセット Y
     /// スパイラルの描画形状（正方 or ハニカム）
     pub spiral_grid_shape: SpiralGridShape,
+    /// スパイラルの数列モード（全マス or 末尾1379候補のみ）
+    pub spiral_number_mode: SpiralNumberMode,
+    /// スパイラルの判定モード（素数判定 or 理論密度ランダム）
+    pub spiral_prime_mode: SpiralPrimeMode,
     /// 螺旋パス（セル中心を結ぶ線）を表示するかどうか
     pub spiral_show_path: bool,
 }
@@ -157,7 +371,7 @@ pub struct MyApp {
 pub enum ExploreGraphMode {
     #[default]
     PiVsXLogX, // π(x) vs x/log x
-    Ratio,     // π(x) / (x/log x)
+    Ratio, // π(x) / (x/log x)
 }
 
 impl MyApp {
@@ -179,6 +393,9 @@ impl MyApp {
         setup_style(&cc.egui_ctx);
 
         MyApp {
+            analyze_mode: AppMode::Seisei,
+            analyze: AnalyzeState::default(),
+
             prime_min_input: config.prime_min.to_string(),
             prime_max_input: config.prime_max.to_string(),
             split_count_input: config.split_count.to_string(),
@@ -271,10 +488,60 @@ impl MyApp {
             spiral_pan_x: 0.0,
             spiral_pan_y: 0.0,
             spiral_grid_shape: SpiralGridShape::default(),
+            spiral_number_mode: SpiralNumberMode::default(),
+            spiral_prime_mode: SpiralPrimeMode::default(),
             // 初期状態ではパス線を非表示（ユーザーが明示的に有効化できるようにする）
             spiral_show_path: false,
         }
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[test]
+    fn candidate_sequence_starts_correctly() {
+        let center = 1u64;
+        let mode = SpiralNumberMode::Candidates1379;
+        let got: Vec<u64> = (0u64..12)
+            .map(|s| spiral_value_at_step(mode, center, s))
+            .collect();
+        let expected = vec![1, 3, 7, 9, 11, 13, 17, 19, 21, 23, 27, 29];
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn next_candidate_rounds_up() {
+        let cases = [
+            (1, 1),
+            (2, 3),
+            (3, 3),
+            (4, 7),
+            (5, 7),
+            (6, 7),
+            (7, 7),
+            (8, 9),
+            (9, 9),
+            (10, 11),
+            (11, 11),
+            (12, 13),
+            (14, 17),
+            (18, 19),
+            (20, 21),
+        ];
+        for (n, exp) in cases {
+            assert_eq!(next_candidate_1379(n), exp);
+        }
+    }
+
+    #[test]
+    fn rank_value_roundtrip() {
+        // 0..100 くらいの範囲で往復確認
+        for rank in 0u64..200 {
+            let v = candidate_1379_of_rank(rank);
+            assert!(is_candidate_1379(v));
+            assert_eq!(rank_of_candidate_1379(v), rank);
+        }
+    }
+}

@@ -93,10 +93,7 @@ fn render_output_card(ui: &mut egui::Ui, app: &mut MyApp, _width: f32, height: f
         // Browse ボタンは横幅を固定して左寄せにする
         ui.horizontal(|ui| {
             if ui
-                .add(
-                    egui::Button::new("Browse")
-                        .min_size(egui::vec2(80.0, layout::BUTTON_HEIGHT)),
-                )
+                .add(egui::Button::new("Browse").min_size(egui::vec2(80.0, layout::BUTTON_HEIGHT)))
                 .clicked()
             {
                 let current = app.output_dir_input.trim();
@@ -126,7 +123,7 @@ fn render_progress_card(ui: &mut egui::Ui, app: &MyApp, _width: f32, height: f32
         };
 
         ui.label(
-            egui::RichText::new(format!("{:.1}%", percent))
+            egui::RichText::new(format!("{percent:.1}%"))
                 .size(font_sizes::HERO)
                 .color(colors::TEXT_PRIMARY),
         );
@@ -211,5 +208,3 @@ fn render_log_card(ui: &mut egui::Ui, app: &MyApp, _width: f32, height: f32) {
             });
     });
 }
-
-

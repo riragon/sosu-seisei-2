@@ -18,3 +18,11 @@ sysinfo = "0.32"
 rfd = "0.15"
 primecount = "0.2"
 chrono = "0.4"
+fastrand = "2"
+statrs = "0.17"
+
+# Windows/MSVC では Rust が常に release CRT (/MD) を使う一方、
+# primecount の CMake ビルドが Debug (/MDd) になるとリンク不整合が起きやすい。
+# dev でも primecount だけ最適化を少し入れて RelWithDebInfo 相当でビルドさせる。
+[profile.dev.package.primecount]
+opt-level = 1

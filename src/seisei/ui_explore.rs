@@ -7,8 +7,8 @@ use crate::ui_components::{
     GraphTooltipStyle, ZoomPanState,
 };
 use crate::ui_graph_utils::{
-    apply_view_transform, data_to_screen, draw_axes, draw_polyline, pick_closest_point,
-    AxisLabels, LegendItem, DEFAULT_ZOOM_CONFIG,
+    apply_view_transform, data_to_screen, draw_axes, draw_polyline, pick_closest_point, AxisLabels,
+    LegendItem, DEFAULT_ZOOM_CONFIG,
 };
 use crate::ui_theme::{colors, font_sizes, layout};
 
@@ -138,24 +138,50 @@ fn render_explore_graph_card(ui: &mut egui::Ui, app: &mut MyApp) {
             let tab_size = egui::vec2(100.0, 24.0);
 
             let pi_selected = app.explore_graph_mode == ExploreGraphMode::PiVsXLogX;
-            let pi_fill = if pi_selected { colors::ACCENT } else { egui::Color32::TRANSPARENT };
-            let pi_text = if pi_selected { egui::Color32::WHITE } else { colors::TEXT_SECONDARY };
-            if ui.add(
-                egui::Button::new(egui::RichText::new("π(x) vs x/logx").size(12.0).color(pi_text))
+            let pi_fill = if pi_selected {
+                colors::ACCENT
+            } else {
+                egui::Color32::TRANSPARENT
+            };
+            let pi_text = if pi_selected {
+                egui::Color32::WHITE
+            } else {
+                colors::TEXT_SECONDARY
+            };
+            if ui
+                .add(
+                    egui::Button::new(
+                        egui::RichText::new("π(x) vs x/logx")
+                            .size(12.0)
+                            .color(pi_text),
+                    )
                     .fill(pi_fill)
                     .min_size(tab_size),
-            ).clicked() {
+                )
+                .clicked()
+            {
                 app.explore_graph_mode = ExploreGraphMode::PiVsXLogX;
             }
 
             let ratio_selected = app.explore_graph_mode == ExploreGraphMode::Ratio;
-            let ratio_fill = if ratio_selected { colors::ACCENT } else { egui::Color32::TRANSPARENT };
-            let ratio_text = if ratio_selected { egui::Color32::WHITE } else { colors::TEXT_SECONDARY };
-            if ui.add(
-                egui::Button::new(egui::RichText::new("Ratio").size(12.0).color(ratio_text))
-                    .fill(ratio_fill)
-                    .min_size(egui::vec2(60.0, 24.0)),
-            ).clicked() {
+            let ratio_fill = if ratio_selected {
+                colors::ACCENT
+            } else {
+                egui::Color32::TRANSPARENT
+            };
+            let ratio_text = if ratio_selected {
+                egui::Color32::WHITE
+            } else {
+                colors::TEXT_SECONDARY
+            };
+            if ui
+                .add(
+                    egui::Button::new(egui::RichText::new("Ratio").size(12.0).color(ratio_text))
+                        .fill(ratio_fill)
+                        .min_size(egui::vec2(60.0, 24.0)),
+                )
+                .clicked()
+            {
                 app.explore_graph_mode = ExploreGraphMode::Ratio;
             }
 
@@ -222,7 +248,12 @@ fn render_explore_graph_card(ui: &mut egui::Ui, app: &mut MyApp) {
 }
 
 /// Render pi(x) vs x/log x or ratio graph（ズーム・ツールチップ対応）
-fn render_pi_graph(app: &mut MyApp, ui: &mut egui::Ui, rect: egui::Rect, response: &egui::Response) {
+fn render_pi_graph(
+    app: &mut MyApp,
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    response: &egui::Response,
+) {
     let painter = ui.painter_at(rect);
 
     // 背景
@@ -321,7 +352,10 @@ fn render_pi_vs_xlogx_graph(
     }
 
     // データ範囲を計算
-    let min_x = data.iter().map(|(x, _, _)| *x).fold(f64::INFINITY, f64::min);
+    let min_x = data
+        .iter()
+        .map(|(x, _, _)| *x)
+        .fold(f64::INFINITY, f64::min);
     let max_x = data.iter().map(|(x, _, _)| *x).fold(0.0_f64, f64::max);
     let max_y = data
         .iter()
@@ -337,10 +371,10 @@ fn render_pi_vs_xlogx_graph(
 
     // 軸描画（共通ヘルパー）
     let axis_labels = AxisLabels {
-        y_max: format!("{:.0}", max_y),
+        y_max: format!("{max_y:.0}"),
         y_min: "0".to_string(),
-        x_min: format!("{:.0}", min_x),
-        x_max: format!("{:.0}", max_x),
+        x_min: format!("{min_x:.0}"),
+        x_max: format!("{max_x:.0}"),
     };
     draw_axes(painter, graph_rect, view, &axis_labels, axis_color);
 
@@ -406,9 +440,13 @@ fn render_pi_vs_xlogx_graph(
     }
 
     // ツールチップ（共通ヘルパーで最近傍点を選択）
-    if let Some((idx, pos)) =
-        pick_closest_point(hover_pos, graph_rect, view, &pi_screen_points, f32::INFINITY)
-    {
+    if let Some((idx, pos)) = pick_closest_point(
+        hover_pos,
+        graph_rect,
+        view,
+        &pi_screen_points,
+        f32::INFINITY,
+    ) {
         let (x, pi, xlx) = data[idx];
         let text = format!(
             "x = {:.0}\npi(x) = {:.0}\nx/logx = {:.1}\ndiff = {:.1}",
@@ -463,8 +501,8 @@ fn render_ratio_graph(
     let axis_labels = AxisLabels {
         y_max: "1.3".to_string(),
         y_min: "0.3".to_string(),
-        x_min: format!("{:.0}", min_x),
-        x_max: format!("{:.0}", max_x),
+        x_min: format!("{min_x:.0}"),
+        x_max: format!("{max_x:.0}"),
     };
     draw_axes(painter, graph_rect, view, &axis_labels, axis_color);
 
@@ -563,5 +601,3 @@ fn render_ratio_graph(
         *tooltip = Some((pos, text));
     }
 }
-
-

@@ -40,17 +40,10 @@ pub fn simple_sieve(limit: u64) -> PrimeResult<Vec<u64>> {
     }
 
     let mut primes = Vec::new();
-    for (i, &flag) in is_prime
-        .iter()
-        .enumerate()
-        .take(limit as usize + 1)
-        .skip(2)
-    {
+    for (i, &flag) in is_prime.iter().enumerate().take(limit as usize + 1).skip(2) {
         if flag {
             primes.push(i as u64);
         }
     }
     Ok(primes)
 }
-
-

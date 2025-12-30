@@ -1,7 +1,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 use eframe::NativeOptions;
-use sosu_seisei_main2::prime_pi_engine::compute_prime_pi;
+use sosu_seisei_main2::seisei::prime_pi_engine::compute_prime_pi;
 
 fn main() -> eframe::Result<()> {
     env_logger::init();

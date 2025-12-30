@@ -5,6 +5,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::analyze::tab_last_digit::LastDigitResult;
+use crate::analyze::tab_mod30::Mod30Result;
+use crate::analyze::tab_prhs::{PRHS210Result, PRHSResult};
+use crate::analyze::tab_validation::ValidationBundle;
+
 /// ワーカースレッド（CPU/GPU エンジンや検証処理）から UI へ送られるメッセージ。
 ///
 /// この列挙型は「進捗・ログの契約」の中核です。バリアントの意味を変えると
@@ -17,28 +22,83 @@ use serde::{Deserialize, Serialize};
 /// - `MemUsage` : 現在のメモリ使用量（KB）。500ms ごとに `start_resource_monitor` から送信されます。
 /// - `Done`     : 正常完了を表し、UI 側で `is_running` を false にし、receiver を破棄します。
 /// - `Stopped`  : ユーザー操作による停止を表し、「Process stopped by user。」ログを残して終了します。
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum WorkerMessage {
     Log(String),
-    Progress { current: u64, total: u64 },
+    Progress {
+        current: u64,
+        total: u64,
+    },
     Eta(String),
     MemUsage(u64),
     Done,
     Stopped,
     /// Explore モード用: (x, π(x)) のデータポイント
-    ExploreData { x: u64, pi_x: u64 },
+    ExploreData {
+        x: u64,
+        pi_x: u64,
+    },
     /// Gap モード用: 新しい素数とその直前の素数との差（ギャップ）
-    GapData { prime: u64, prev_prime: u64, gap: u64 },
+    GapData {
+        prime: u64,
+        prev_prime: u64,
+        gap: u64,
+    },
     /// Density モード用: 区間の開始位置と素数個数
-    DensityData { interval_start: u64, count: u64 },
+    DensityData {
+        interval_start: u64,
+        count: u64,
+    },
     /// Spiral モード用: 素数フラグ配列（ステップ順一次元列）
     ///
     /// - `primes.len()` は通常 `size * size` 以上（生成時に上限サイズで確保）。
-    /// - インデックス `k` は整数値 `n = spiral_center + k`（UI 側 `MyApp` の状態）に対応し、
-    ///   その値が素数なら `primes[k] == true` になります。
+    /// - インデックス `k` は「スパイラル上の連番セル（step）」に対応します。
+    ///   実際に判定した整数値 `n` は UI の数列モード（All / Candidates）に応じて決まり、
+    ///   UI の判定モード（Prime / Random）に応じて「素数」または「ランダムでマーク」
+    ///   された場合に `primes[k] == true` になります。
     /// - グリッド上のどのセルに配置するかは UI 側（スクエア / ハニカム等）が
     ///   この一次元列をそれぞれの座標系にマッピングして決めます。
-    SpiralData { primes: Vec<bool>, size: usize },
+    SpiralData {
+        primes: Vec<bool>,
+        size: usize,
+    },
+
+    /// Sosu-Analyze モード用: LastDigit 分析結果（高次分析含む）と総数
+    AnalyzeLastDigitResult {
+        result: LastDigitResult,
+        total: u64,
+    },
+
+    /// Sosu-Analyze モード用: mod 30（8種類）分析結果と総数
+    AnalyzeMod30Result {
+        result: Mod30Result,
+        total: u64,
+    },
+
+    /// Sosu-Analyze モード用: mod 30 PRHS 分析結果と総数（トリプレット数）
+    AnalyzePRHSResult {
+        result: PRHSResult,
+        total: u64,
+    },
+
+    /// Sosu-Analyze モード用: mod 210 PRHS 分析結果と総数（トリプレット数）
+    AnalyzePRHS210Result {
+        result: PRHS210Result,
+        total: u64,
+    },
+
+    /// Sosu-Analyze モード用: Validation（検証）結果と総数（トリプレット数）
+    AnalyzeValidationResult {
+        result: ValidationBundle,
+        total: u64,
+    },
+
+    /// Sosu-Analyze モード用: バイナリ読み込み進捗（処理済みレコード数 / 総レコード数）
+    AnalyzeProgress {
+        current: u64,
+        total: u64,
+    },
 }
 
 /// ETA（残り時間の秒数）を人間が読みやすい文字列にフォーマットするヘルパー。
@@ -79,4 +139,3 @@ pub fn format_eta(eta_secs: Option<u64>) -> String {
         }
     }
 }
-

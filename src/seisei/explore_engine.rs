@@ -6,10 +6,24 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 
-use crate::prime_pi_engine::compute_prime_pi;
-use crate::sieve_math::simple_sieve;
+use crate::app_state::{
+    random_by_prime_density, spiral_value_at_step, SpiralNumberMode, SpiralPrimeMode,
+};
+use crate::seisei::prime_pi_engine::compute_prime_pi;
+use crate::seisei::sieve_math::simple_sieve;
+use crate::seisei::verify::is_probable_prime;
 use crate::worker_message::WorkerMessage;
-use crate::verify::is_probable_prime;
+
+/// UI の速度インデックス（0.0=1x, 1.0=3x, 2.0=MAX）を、スリープ時間（ms）へ変換する。
+fn speed_to_delay_ms(speed: f32, base_ms: u64) -> u64 {
+    if speed < 0.5 {
+        base_ms
+    } else if speed < 1.5 {
+        base_ms / 3
+    } else {
+        0
+    }
+}
 
 /// Explore モードのアニメーションを開始する。
 ///
@@ -26,8 +40,7 @@ pub fn start_explore_animation(
     std::thread::spawn(move || {
         sender
             .send(WorkerMessage::Log(format!(
-                "Starting π(x) visualization for range [{}, {}]...",
-                prime_min, prime_max
+                "Starting π(x) visualization for range [{prime_min}, {prime_max}]..."
             )))
             .ok();
 
@@ -38,13 +51,7 @@ pub fn start_explore_animation(
 
         // 速度インデックスに応じたスリープ時間（ms）
         // speed: 0.0 => 1x, 1.0 => 3x, 2.0 => MAX(0ms)
-        let base_delay_ms: u64 = if speed < 0.5 {
-            50 // 1x
-        } else if speed < 1.5 {
-            (50.0 / 3.0) as u64 // 約 3x
-        } else {
-            0 // MAX（待ち時間なし）
-        };
+        let base_delay_ms = speed_to_delay_ms(speed, 50);
 
         let mut x = prime_min;
         let mut step = 0;
@@ -53,16 +60,13 @@ pub fn start_explore_animation(
             // π(x) を計算
             match compute_prime_pi(x) {
                 Ok(pi_x) => {
-                    if sender
-                        .send(WorkerMessage::ExploreData { x, pi_x })
-                        .is_err()
-                    {
+                    if sender.send(WorkerMessage::ExploreData { x, pi_x }).is_err() {
                         break;
                     }
                 }
                 Err(e) => {
                     sender
-                        .send(WorkerMessage::Log(format!("Error computing π({}): {}", x, e)))
+                        .send(WorkerMessage::Log(format!("Error computing π({x}): {e}")))
                         .ok();
                     break;
                 }
@@ -95,8 +99,7 @@ pub fn start_explore_animation(
         } else {
             sender
                 .send(WorkerMessage::Log(format!(
-                    "Visualization complete. {} data points generated.",
-                    step
+                    "Visualization complete. {step} data points generated."
                 )))
                 .ok();
             sender.send(WorkerMessage::Done).ok();
@@ -121,8 +124,7 @@ pub fn start_gap_animation(
 
         sender
             .send(WorkerMessage::Log(format!(
-                "Starting prime gap visualization for range [{}, {}]...",
-                prime_min, prime_max
+                "Starting prime gap visualization for range [{prime_min}, {prime_max}]..."
             )))
             .ok();
 
@@ -143,8 +145,7 @@ pub fn start_gap_animation(
             Err(e) => {
                 sender
                     .send(WorkerMessage::Log(format!(
-                        "Error while generating primes for gap visualization: {}",
-                        e
+                        "Error while generating primes for gap visualization: {e}"
                     )))
                     .ok();
                 let _ = sender.send(WorkerMessage::Done);
@@ -183,13 +184,7 @@ pub fn start_gap_animation(
         }
 
         // 速度インデックスに応じたスリープ時間（ms）
-        let base_delay_ms: u64 = if speed < 0.5 {
-            50 // 1x
-        } else if speed < 1.5 {
-            (50.0 / 3.0) as u64 // 約 3x
-        } else {
-            0 // MAX
-        };
+        let base_delay_ms = speed_to_delay_ms(speed, 50);
 
         for (idx, (prev, prime, gap)) in gaps.into_iter().enumerate() {
             if stop_flag.load(Ordering::SeqCst) {
@@ -250,8 +245,7 @@ pub fn start_density_animation(
 
         sender
             .send(WorkerMessage::Log(format!(
-                "Starting prime density visualization for range [{}, {}] (interval = {})...",
-                prime_min, prime_max, interval_size
+                "Starting prime density visualization for range [{prime_min}, {prime_max}] (interval = {interval_size})..."
             )))
             .ok();
 
@@ -272,8 +266,7 @@ pub fn start_density_animation(
             Err(e) => {
                 sender
                     .send(WorkerMessage::Log(format!(
-                        "Error while generating primes for density visualization: {}",
-                        e
+                        "Error while generating primes for density visualization: {e}"
                     )))
                     .ok();
                 let _ = sender.send(WorkerMessage::Done);
@@ -321,13 +314,7 @@ pub fn start_density_animation(
             return;
         }
 
-        let base_delay_ms: u64 = if speed < 0.5 {
-            50 // 1x
-        } else if speed < 1.5 {
-            (50.0 / 3.0) as u64 // 約 3x
-        } else {
-            0 // MAX
-        };
+        let base_delay_ms = speed_to_delay_ms(speed, 50);
 
         for (i, (start, count)) in intervals.into_iter().enumerate() {
             if stop_flag.load(Ordering::SeqCst) {
@@ -379,6 +366,8 @@ pub fn start_spiral_generation(
     center: u64,
     size: usize,
     speed: f32,
+    mode: SpiralNumberMode,
+    prime_mode: SpiralPrimeMode,
     stop_flag: Arc<AtomicBool>,
     sender: mpsc::Sender<WorkerMessage>,
 ) {
@@ -390,8 +379,7 @@ pub fn start_spiral_generation(
 
         sender
             .send(WorkerMessage::Log(format!(
-                "Starting Ulam spiral visualization (center = {}, size = {}x{})...",
-                center, size, size
+                "Starting spiral visualization (mode = {mode:?}, detection = {prime_mode:?}, center = {center}, size = {size}x{size})..."
             )))
             .ok();
 
@@ -399,13 +387,7 @@ pub fn start_spiral_generation(
         let mut primes = vec![false; total_cells as usize];
 
         // 速度インデックスに応じたスリープ時間（ms）
-        let base_delay_ms: u64 = if speed < 0.5 {
-            30 // 1x
-        } else if speed < 1.5 {
-            (30.0 / 3.0) as u64 // 約 3x
-        } else {
-            0 // MAX
-        };
+        let base_delay_ms = speed_to_delay_ms(speed, 30);
 
         // ステップ順一次元配列として、center, center+1, ... の素数判定を行う
         let update_every: u64 = (size as u64).max(1);
@@ -415,8 +397,12 @@ pub fn start_spiral_generation(
                 return;
             }
 
-            let n = center.saturating_add(step);
-            if is_probable_prime(n) {
+            let n = spiral_value_at_step(mode, center, step);
+            let marked = match prime_mode {
+                SpiralPrimeMode::Prime => is_probable_prime(n),
+                SpiralPrimeMode::Random => random_by_prime_density(n, mode),
+            };
+            if marked {
                 primes[step as usize] = true;
             }
 
@@ -447,4 +433,3 @@ pub fn start_spiral_generation(
         let _ = sender.send(WorkerMessage::Done);
     });
 }
-

@@ -11,9 +11,7 @@ use crate::worker_message::WorkerMessage;
 ///
 /// - このスレッドはメインの計算とは独立して動作し、UI の「Memory Usage」表示を更新します。
 /// - sender 側がドロップされた場合（計算終了・画面クローズなど）はループを終了します。
-pub fn start_resource_monitor(
-    sender: mpsc::Sender<WorkerMessage>,
-) -> std::thread::JoinHandle<()> {
+pub fn start_resource_monitor(sender: mpsc::Sender<WorkerMessage>) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let mut sys = sysinfo::System::new_all();
         sys.refresh_memory();
@@ -30,5 +28,3 @@ pub fn start_resource_monitor(
         }
     })
 }
-
-
